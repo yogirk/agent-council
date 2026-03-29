@@ -69,6 +69,8 @@ Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
 
 /council-list                              # List all past sessions
 /council-replay council-20260329-143000    # Replay a session in terminal
+/council-revisit council-20260329-143000   # Re-run with current context (living decisions)
+/council-outcome council-20260329-143000 "It worked great"  # Record outcome
 ```
 
 ### From the command line
@@ -167,6 +169,33 @@ Every council session generates a self-contained HTML viewer. Open it in your br
 - **Collapsible sections** for reasoning, trade-offs, and dissent points within each card
 - **Synthesis panel** showing the chairman's consensus, divergence, and recommendation
 
+## Does It Work?
+
+We ran 3 benchmark questions through the council and compared against a single agent (Claude Opus 4.6). The council consistently found more considerations:
+
+| Benchmark | Single Agent | Council | Delta |
+|-----------|-------------|---------|-------|
+| Database choice (Postgres vs DynamoDB) | 1/5 (20%) | 3/5 (60%) | +2 |
+| Error handling (exceptions vs Result types) | 0/5 (0%) | 1/5 (20%) | +1 |
+| Deployment (Kubernetes vs Docker Compose vs PaaS) | 3/5 (60%) | 4/5 (80%) | +1 |
+| **Average** | **27%** | **53%** | **+1.3** |
+
+The council found nearly 2x as many expected considerations. This measures consideration coverage (did the response mention scaling? cost? team experience?), not answer quality. Run your own eval: `bun run eval/run-eval.ts --dry-run` to see all 10 benchmarks.
+
+## Proactive Suggestions
+
+Agent Council can suggest `/council` when it detects you're making a decision with trade-offs. After setup, an ambient skill watches for patterns like:
+
+- "should we use X or Y" → suggests `/council`
+- Referencing past decisions → suggests `/council-revisit`
+- Old council sessions without outcomes → suggests `/council-outcome`
+
+Suggestions are quiet (a single line after the response), max 2 per session, and never interrupt your flow. Disable in `~/.council/config.json`:
+
+```json
+{ "proactive": false }
+```
+
 ## Use Cases
 
 - **Architecture decisions:** "Postgres vs DynamoDB for event sourcing at 10k events/sec?"
@@ -184,9 +213,10 @@ Every council session generates a self-contained HTML viewer. Open it in your br
 
 ## Roadmap
 
-- **Phase 1** (current): Working council with 3 adapters, viewer, Claude Code skill
-- **Phase 2:** Living decisions (revisit past councils with new context), cross-platform chairman, outcome tracking, calibration profiles
-- **Phase 3:** Shareable deliberation exports, community features
+- **Phase 1** (done): Working council with 3 adapters, viewer, Claude Code skill
+- **Phase 2** (done): Living decisions, outcome tracking, security hardening, progressive output
+- **Phase 3** (done): Proactive nudge system, evaluation benchmarks
+- **Phase 4:** Cross-platform chairman (invoke from Codex/Gemini), shareable deliberation exports, calibration profiles, `council.ts` refactor
 
 ## License
 
