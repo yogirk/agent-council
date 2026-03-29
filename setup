@@ -148,9 +148,12 @@ install_nudge() {
   DIR=$(dirname "$FILE")
   mkdir -p "$DIR"
   if [ -f "$FILE" ] && grep -q "$NUDGE_START" "$FILE" 2>/dev/null; then
-    # Already installed — update in place
-    # Remove old block and append new one
-    sed "/$NUDGE_START/,/$NUDGE_END/d" "$FILE" > "$FILE.tmp"
+    # Already installed — remove old block before re-appending
+    awk '
+      /<!-- agent-council-nudge -->/{skip=1}
+      /<!-- \/agent-council-nudge -->/{skip=0; next}
+      !skip
+    ' "$FILE" > "$FILE.tmp"
     mv "$FILE.tmp" "$FILE"
   fi
   [ ! -f "$FILE" ] && touch "$FILE"
