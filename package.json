@@ -5,13 +5,26 @@
   "type": "module",
   "main": "src/council.ts",
   "bin": {
+    "agent-council": "install.js",
     "council": "bin/council"
   },
   "scripts": {
     "start": "bun run src/council.ts",
     "test": "bun test",
-    "build": "bun build --compile src/council.ts --outfile bin/council-bin"
+    "build": "bun build --compile src/council.ts --outfile bin/council-bin",
+    "postinstall": "node install.js"
   },
+  "keywords": [
+    "ai",
+    "council",
+    "llm",
+    "multi-agent",
+    "deliberation",
+    "claude",
+    "codex",
+    "gemini",
+    "cli"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",

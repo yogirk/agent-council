@@ -22,7 +22,7 @@ If the user doesn't provide a session ID, run `/council-list` first to show avai
 Replace `{SESSION_ID}` and `{RESULT}` with the user's values.
 
 ```bash
-COUNCIL_BIN=$([ -x "$HOME/.claude/skills/agent-council/bin/council" ] && echo "$HOME/.claude/skills/agent-council/bin/council" || echo "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/bin/council")
+COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
 SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
 $COUNCIL_BIN outcome {SESSION_ID} --result "{RESULT}" --project "$SLUG"
 ```
