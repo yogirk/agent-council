@@ -27,8 +27,12 @@ Replace `{SESSION_ID}` with the session ID the user provided.
 
 ```bash
 COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
+# Detect which CLI is invoking (whoever runs this is the chairman)
+_CHAIRMAN="claude"
+[ -n "$CODEX_SESSION_ID" ] || [ -n "$OPENAI_API_KEY" ] && command -v codex &>/dev/null && _CHAIRMAN="codex"
+[ -n "$GEMINI_API_KEY" ] && command -v gemini &>/dev/null && _CHAIRMAN="gemini"
 SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
-SESSION_DIR=$($COUNCIL_BIN revisit {SESSION_ID} --chairman claude --project "$SLUG")
+SESSION_DIR=$($COUNCIL_BIN revisit {SESSION_ID} --chairman "$_CHAIRMAN" --project "$SLUG")
 echo "SESSION_DIR=$SESSION_DIR"
 ```
 

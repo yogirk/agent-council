@@ -537,7 +537,7 @@ function parseArgs(): {
   // Subcommands
   if (args[0] === "list") {
     const project = getFlag(args, "--project") || detectProjectSlug();
-    return { command: "list", chairman: "claude", project, mode: "fast", contextFiles: [] };
+    return { command: "list", chairman: detectChairman(), project, mode: "fast", contextFiles: [] };
   }
   if (args[0] === "replay") {
     const sessionId = args[1];
@@ -548,7 +548,7 @@ function parseArgs(): {
     const project = getFlag(args, "--project") || detectProjectSlug();
     return {
       command: "replay",
-      chairman: "claude",
+      chairman: detectChairman(),
       project,
       mode: "fast",
       contextFiles: [],
@@ -564,7 +564,7 @@ function parseArgs(): {
     const project = getFlag(args, "--project") || detectProjectSlug();
     const contextArg = getFlag(args, "--context");
     const contextFiles = contextArg ? contextArg.split(",") : [];
-    const chairman = validateChairman(getFlag(args, "--chairman") || "claude");
+    const chairman = validateChairman(getFlag(args, "--chairman") || detectChairman());
     return {
       command: "revisit",
       chairman,
@@ -588,7 +588,7 @@ function parseArgs(): {
     const project = getFlag(args, "--project") || detectProjectSlug();
     return {
       command: "outcome",
-      chairman: "claude",
+      chairman: detectChairman(),
       project: validateProjectSlug(project),
       mode: "fast",
       contextFiles: [],
@@ -599,7 +599,7 @@ function parseArgs(): {
 
   // Default: run a council session
   const questionFile = getFlag(args, "--question-file");
-  const chairman = validateChairman(getFlag(args, "--chairman") || "claude");
+  const chairman = validateChairman(getFlag(args, "--chairman") || detectChairman());
   const project = validateProjectSlug(getFlag(args, "--project") || detectProjectSlug());
   const withReview = args.includes("--with-review");
   const quick = args.includes("--quick");
@@ -635,6 +635,13 @@ function detectProjectSlug(): string {
 
 const SENSITIVE_EXTENSIONS = [".key", ".pem", ".env", ".secret", ".token", ".p12", ".pfx"];
 const VALID_AGENT_IDS = ["claude", "codex", "gemini"];
+
+function detectChairman(): AgentId {
+  // Detect which CLI is invoking us based on environment signals
+  if (process.env.CODEX_SESSION_ID || process.env.CODEX_AGENT_ID) return "codex";
+  if (process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) return "gemini";
+  return "claude";
+}
 
 function isPathSafe(file: string, repoRoot: string): { safe: boolean; reason?: string } {
   if (file.startsWith("/")) {
