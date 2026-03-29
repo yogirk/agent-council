@@ -1,6 +1,8 @@
 # Agent Council
 
-Convene a panel of CLI-based AI agents to deliberate on your engineering questions. Three models answer independently, review each other's work, and a chairman synthesizes the verdict.
+Convene a panel of CLI-based AI agents to deliberate on your questions. Three models answer independently, review each other's work, and the invoking agent synthesizes the verdict as chairman.
+
+Works with **Claude Code**, **Codex CLI**, and **Gemini CLI**. Whichever tool you invoke from becomes the chairman. The others are council members.
 
 Inspired by [Karpathy's LLM Council](https://github.com/karpathy/llm-council), adapted for the CLI agent ecosystem.
 
@@ -44,7 +46,7 @@ HIGH — Strong consensus across models.
 
 2. **Zero marginal cost.** You're tapping into subscriptions you already have (Claude Code, Codex, Gemini CLI). No new API tokens to buy.
 
-3. **Living decisions.** Every deliberation is a hypothesis that can be re-evaluated. "We chose Postgres 3 months ago... re-run with what we know now." (Phase 2)
+3. **Living decisions.** Every deliberation is a hypothesis that can be re-evaluated. "We chose Postgres 3 months ago... re-run with what we know now." Use `/council-revisit` to compare then vs now.
 
 ## Quick Start
 
@@ -54,14 +56,19 @@ cd agent-council
 ./setup
 ```
 
+Setup detects all installed CLI agents and installs skills for each platform automatically.
+
 Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
-- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`)
-- [OpenAI Codex](https://github.com/openai/codex) (`codex`)
-- [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`)
+- [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — skills install to `~/.claude/skills/`
+- [OpenAI Codex](https://github.com/openai/codex) (`codex`) — skills install to `~/.agents/skills/`
+- [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) — skills install to `~/.gemini/skills/`
 
 ## Usage
 
-### From Claude Code (skills)
+### As a skill (Claude Code, Codex CLI, Gemini CLI)
+
+The same slash commands work in all three CLIs. The invoking agent automatically becomes the chairman.
+
 ```
 /council "Should we use WebSockets or SSE for real-time updates?"
 /council --with-review "Review auth middleware for security issues"
@@ -73,13 +80,18 @@ Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
 /council-outcome council-20260329-143000 "It worked great"  # Record outcome
 ```
 
+When invoked from Claude Code, Claude is chairman. From Codex, Codex is chairman. From Gemini, Gemini is chairman. The chairman gives its own independent opinion in Stage 1, then synthesizes all opinions in Stage 3.
+
 ### From the command line
 ```bash
 # Fast mode (default): opinions + synthesis
-bin/council --question-file question.txt --chairman claude --project myapp
+bin/council --question-file question.txt --project myapp
+
+# Specify chairman explicitly (auto-detected if omitted)
+bin/council --question-file question.txt --chairman codex --project myapp
 
 # With peer review
-bin/council --question-file question.txt --chairman claude --project myapp --with-review
+bin/council --question-file question.txt --project myapp --with-review
 
 # Browse past sessions
 bin/council list --project myapp
@@ -213,10 +225,8 @@ Suggestions are quiet (a single line after the response), max 2 per session, and
 
 ## Roadmap
 
-- **Phase 1** (done): Working council with 3 adapters, viewer, Claude Code skill
-- **Phase 2** (done): Living decisions, outcome tracking, security hardening, progressive output
-- **Phase 3** (done): Proactive nudge system, evaluation benchmarks
-- **Phase 4:** Cross-platform chairman (invoke from Codex/Gemini), shareable deliberation exports, calibration profiles, `council.ts` refactor
+- **v0.1.0** (done): Three-stage deliberation, 3 adapters, redesigned viewer, cross-platform skills (Claude Code + Codex + Gemini), living decisions, outcome tracking, security hardening, progressive output, proactive nudge system, evaluation benchmarks
+- **Next:** Shareable deliberation exports, calibration profiles (which model is best at what), `council.ts` modular refactor, npm publish for `npx agent-council`
 
 ## License
 
