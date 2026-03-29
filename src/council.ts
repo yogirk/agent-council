@@ -39,7 +39,16 @@ const DEFAULT_CONFIG: CouncilConfig = {
 };
 
 function councilHome(): string {
-  return resolve(homedir(), ".council");
+  const home = resolve(homedir(), ".council");
+  try {
+    mkdirSync(home, { recursive: true });
+    return home;
+  } catch {
+    // Fallback to .council/ in project root (e.g. when sandboxed)
+    const local = resolve(process.cwd(), ".council");
+    mkdirSync(local, { recursive: true });
+    return local;
+  }
 }
 
 function loadConfig(): CouncilConfig {
@@ -637,7 +646,22 @@ const SENSITIVE_EXTENSIONS = [".key", ".pem", ".env", ".secret", ".token", ".p12
 const VALID_AGENT_IDS = ["claude", "codex", "gemini"];
 
 function detectChairman(): AgentId {
-  // Detect which CLI is invoking us based on environment signals
+  // Detect which CLI is invoking us by walking the process tree
+  try {
+    const { execSync } = require("child_process");
+    let pid = process.ppid;
+    for (let i = 0; i < 5 && pid > 1; i++) {
+      const info = execSync(`ps -o ppid=,comm= -p ${pid} 2>/dev/null`, { encoding: "utf-8" }).trim();
+      const parts = info.split(/\s+/);
+      const cmd = (parts[parts.length - 1] || "").replace(/.*\//, "");
+      if (cmd === "codex") return "codex";
+      if (cmd === "gemini") return "gemini";
+      if (cmd === "claude") return "claude";
+      pid = parseInt(parts[0], 10);
+      if (isNaN(pid)) break;
+    }
+  } catch {}
+  // Fallback to env vars
   if (process.env.CODEX_SESSION_ID || process.env.CODEX_AGENT_ID) return "codex";
   if (process.env.GEMINI_API_KEY && !process.env.ANTHROPIC_API_KEY) return "gemini";
   return "claude";

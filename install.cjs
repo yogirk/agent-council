@@ -2,7 +2,7 @@
 
 /**
  * Agent Council installer.
- * Usage: npx agent-council   (or: bunx agent-council)
+ * Usage: npx cliagent-council   (or: bunx cliagent-council)
  *
  * Clones the repo to ~/.council/agent-council/ and runs setup.
  */

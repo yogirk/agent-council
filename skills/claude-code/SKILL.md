@@ -27,16 +27,12 @@ Run this bash block. Replace `{QUESTION}` with the user's actual question text.
 
 ```bash
 COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
-# Detect which CLI is invoking this skill (whoever runs this is the chairman)
-_CHAIRMAN="claude"
-[ -n "$CODEX_SESSION_ID" ] || [ -n "$OPENAI_API_KEY" ] && command -v codex &>/dev/null && _CHAIRMAN="codex"
-[ -n "$GEMINI_API_KEY" ] && command -v gemini &>/dev/null && _CHAIRMAN="gemini"
 QUESTION_FILE=$(mktemp /tmp/council-q-XXXXXX)
 cat <<'COUNCIL_EOF' > "$QUESTION_FILE"
 {QUESTION}
 COUNCIL_EOF
 SLUG=$(basename "$(git rev-parse --show-toplevel 2>/dev/null || pwd)")
-SESSION_DIR=$($COUNCIL_BIN --question-file "$QUESTION_FILE" --chairman "$_CHAIRMAN" --project "$SLUG")
+SESSION_DIR=$($COUNCIL_BIN --question-file "$QUESTION_FILE" --project "$SLUG")
 rm -f "$QUESTION_FILE"
 echo "SESSION_DIR=$SESSION_DIR"
 ```

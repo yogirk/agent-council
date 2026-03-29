@@ -50,13 +50,21 @@ HIGH — Strong consensus across models.
 
 ## Quick Start
 
+### Install via npm
+
+```bash
+npx cliagent-council
+```
+
+This clones the repo, installs skills for all detected CLI agents, and you're ready to go.
+
+### Or install manually
+
 ```bash
 git clone https://github.com/yogirk/agent-council.git
 cd agent-council
 ./setup
 ```
-
-Setup detects all installed CLI agents and installs skills for each platform automatically.
 
 Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — skills install to `~/.claude/skills/`
@@ -228,7 +236,7 @@ Suggestions are quiet (a single line after the response), max 2 per session, and
 ## Roadmap
 
 - **v0.1.0** (done): Three-stage deliberation, 3 adapters, redesigned viewer, cross-platform skills (Claude Code + Codex + Gemini), living decisions, outcome tracking, security hardening, progressive output, proactive nudge system, evaluation benchmarks
-- **Next:** Shareable deliberation exports, calibration profiles (which model is best at what), `council.ts` modular refactor, npm publish for `npx agent-council`
+- **Next:** Shareable deliberation exports, calibration profiles (which model is best at what), `council.ts` modular refactor
 
 ## License
 

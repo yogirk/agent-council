@@ -1,0 +1,14 @@
+tests/
+eval/
+skills/
+node_modules/
+.council/
+.git/
+.gitignore
+CLAUDE.md
+CHANGELOG.md
+idea.md
+tsconfig.json
+*.test.ts
+install.js
+.claude/

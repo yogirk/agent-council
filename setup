@@ -93,8 +93,13 @@ if [ ! -f "$HOME/.council/.proactive-prompted" ]; then
   echo "Agent Council can suggest /council when it detects you're making"
   echo "a decision with trade-offs (e.g., 'should we use X or Y?')."
   echo "Suggestions are quiet, max 2 per session, and never interrupt."
-  printf "Keep suggestions on? [Y/n] "
-  read -r PROACTIVE_CHOICE
+  if [ -t 0 ]; then
+    printf "Keep suggestions on? [Y/n] "
+    read -r PROACTIVE_CHOICE
+  else
+    PROACTIVE_CHOICE="Y"
+    echo "✓ Proactive suggestions enabled (default, non-interactive)"
+  fi
   if [ "$PROACTIVE_CHOICE" = "n" ] || [ "$PROACTIVE_CHOICE" = "N" ]; then
     # Update or create config.json with proactive: false
     if [ -f "$HOME/.council/config.json" ]; then

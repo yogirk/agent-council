@@ -1,18 +1,17 @@
 {
-  "name": "agent-council",
-  "version": "0.1.0",
+  "name": "cliagent-council",
+  "version": "0.1.2",
   "description": "Convene a panel of CLI-based AI agents to deliberate on engineering problems",
   "type": "module",
   "main": "src/council.ts",
   "bin": {
-    "agent-council": "install.js",
+    "cliagent-council": "install.cjs",
     "council": "bin/council"
   },
   "scripts": {
     "start": "bun run src/council.ts",
     "test": "bun test",
-    "build": "bun build --compile src/council.ts --outfile bin/council-bin",
-    "postinstall": "node install.js"
+    "build": "bun build --compile src/council.ts --outfile bin/council-bin"
   },
   "keywords": [
     "ai",
