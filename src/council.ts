@@ -532,7 +532,7 @@ async function recordOutcome(
 // --- CLI Arg Parsing ---
 
 function parseArgs(): {
-  command: "run" | "list" | "replay" | "revisit" | "outcome";
+  command: "run" | "list" | "replay" | "revisit" | "outcome" | "regenerate-viewer";
   chairman: AgentId;
   questionFile?: string;
   project: string;
@@ -580,6 +580,22 @@ function parseArgs(): {
       project: validateProjectSlug(project),
       mode: "fast",
       contextFiles,
+      sessionId,
+    };
+  }
+  if (args[0] === "regenerate-viewer") {
+    const sessionId = args[1];
+    if (!sessionId) {
+      console.error("Usage: council regenerate-viewer <session-id> [--project <slug>]");
+      process.exit(1);
+    }
+    const project = getFlag(args, "--project") || detectProjectSlug();
+    return {
+      command: "regenerate-viewer",
+      chairman: detectChairman(),
+      project: validateProjectSlug(project),
+      mode: "fast" as const,
+      contextFiles: [],
       sessionId,
     };
   }
@@ -773,6 +789,21 @@ async function main(): Promise<void> {
   }
   if (parsed.command === "outcome") {
     await recordOutcome(parsed.project, parsed.sessionId!, parsed.outcomeResult!);
+    return;
+  }
+  if (parsed.command === "regenerate-viewer") {
+    const sessionDir = resolve(councilHome(), parsed.project, parsed.sessionId!);
+    if (!existsSync(sessionDir)) {
+      console.error(`Session not found: ${parsed.sessionId}`);
+      process.exit(1);
+    }
+    const meta: SessionMeta = JSON.parse(readFileSync(resolve(sessionDir, "meta.json"), "utf-8"));
+    const stage1Dir = resolve(sessionDir, "stage1");
+    const opinions: AgentResult[] = readdirSync(stage1Dir)
+      .filter((f) => f.startsWith("opinion_"))
+      .map((f) => JSON.parse(readFileSync(resolve(stage1Dir, f), "utf-8")));
+    generateViewer(sessionDir, meta, opinions);
+    console.log(`Viewer regenerated: ${resolve(sessionDir, "viewer.html")}`);
     return;
   }
 

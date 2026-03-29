@@ -78,6 +78,14 @@ Write your synthesis to `$SESSION_DIR/synthesis.json`:
 }
 ```
 
-## Step 5: Offer the viewer
+## Step 5: Regenerate the viewer
+
+After writing synthesis.json, regenerate the viewer so it includes your verdict:
+
+```bash
+$COUNCIL_BIN regenerate-viewer "$(basename "$SESSION_DIR")" --project "$SLUG"
+```
+
+## Step 6: Offer the viewer
 
 Tell the user: "Council viewer saved to: $SESSION_DIR/viewer.html — open in browser to explore the full deliberation."
