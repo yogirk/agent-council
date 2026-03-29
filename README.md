@@ -66,7 +66,9 @@ cd agent-council
 ./setup
 ```
 
-Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
+**Platform:** macOS and Linux. Windows users: use [WSL](https://learn.microsoft.com/en-us/windows/wsl/).
+
+**Requirements:** [Bun](https://bun.sh) + at least 2 of these CLI agents:
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — skills install to `~/.claude/skills/`
 - [OpenAI Codex](https://github.com/openai/codex) (`codex`) — skills install to `~/.agents/skills/`
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) — skills install to `~/.gemini/skills/`
