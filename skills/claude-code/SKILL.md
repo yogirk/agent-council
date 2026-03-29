@@ -26,7 +26,7 @@ The user invokes `/council "their question"` or `/council --with-review "their q
 Run this bash block. Replace `{QUESTION}` with the user's actual question text.
 
 ```bash
-COUNCIL_BIN=$([ -x "$HOME/.claude/skills/agent-council/bin/council" ] && echo "$HOME/.claude/skills/agent-council/bin/council" || echo "$(git rev-parse --show-toplevel 2>/dev/null || pwd)/bin/council")
+COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
 QUESTION_FILE=$(mktemp /tmp/council-q-XXXXXX)
 cat <<'COUNCIL_EOF' > "$QUESTION_FILE"
 {QUESTION}

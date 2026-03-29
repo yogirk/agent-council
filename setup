@@ -32,47 +32,55 @@ fi
 
 echo ""
 
-# Install Claude Code skill
-if command -v claude &>/dev/null; then
-  SKILL_DIR="$HOME/.claude/skills/agent-council"
+# Install skills to all detected CLI agent platforms
+# SKILL.md is a cross-platform standard: Claude Code, Codex CLI, and Gemini CLI all support it
+SKILLS_SRC="$SCRIPT_DIR/skills/claude-code"
+INSTALLED_TO=""
+
+install_skills() {
+  local BASE_DIR="$1"
+  local LABEL="$2"
+
+  # Main council skill
+  local SKILL_DIR="$BASE_DIR/agent-council"
   mkdir -p "$SKILL_DIR"
-  cp "$SCRIPT_DIR/skills/claude-code/SKILL.md" "$SKILL_DIR/SKILL.md"
-  for skill in council-list council-replay council-revisit council-outcome; do
-    mkdir -p "$HOME/.claude/skills/$skill"
-    cp "$SCRIPT_DIR/skills/claude-code/$skill/SKILL.md" "$HOME/.claude/skills/$skill/SKILL.md"
-  done
-  # Create a symlink to bin/council so the skill can find it
+  cp "$SKILLS_SRC/SKILL.md" "$SKILL_DIR/SKILL.md"
   ln -sf "$SCRIPT_DIR/bin/council" "$SKILL_DIR/council"
-  # Install nudge skill (ambient awareness)
-  mkdir -p "$HOME/.claude/skills/agent-council-nudge"
-  cp "$SCRIPT_DIR/skills/claude-code/agent-council-nudge/SKILL.md" "$HOME/.claude/skills/agent-council-nudge/SKILL.md"
-  echo "✓ Claude Code skills installed to $SKILL_DIR"
-  echo "  /council, /council-list, /council-replay, /council-revisit, /council-outcome"
-  echo "  + ambient nudge awareness (agent-council-nudge)"
+
+  # Sub-command skills
+  for skill in council-list council-replay council-revisit council-outcome; do
+    mkdir -p "$BASE_DIR/$skill"
+    cp "$SKILLS_SRC/$skill/SKILL.md" "$BASE_DIR/$skill/SKILL.md"
+  done
+
+  # Nudge skill (ambient awareness)
+  mkdir -p "$BASE_DIR/agent-council-nudge"
+  cp "$SKILLS_SRC/agent-council-nudge/SKILL.md" "$BASE_DIR/agent-council-nudge/SKILL.md"
+
+  echo "✓ $LABEL skills installed to $BASE_DIR"
+  INSTALLED_TO="$INSTALLED_TO $LABEL"
+}
+
+# Claude Code: ~/.claude/skills/
+if command -v claude &>/dev/null; then
+  install_skills "$HOME/.claude/skills" "Claude Code"
 fi
 
-# Install Codex placeholder
+# Codex CLI: ~/.agents/skills/ (shared agent skills directory)
 if command -v codex &>/dev/null; then
-  CODEX_DIR="$HOME/.agents/skills"
-  mkdir -p "$CODEX_DIR"
-  cat > "$CODEX_DIR/agent-council.md" << 'EOF'
-# Agent Council (Codex)
-Phase 2: Codex as chairman support coming.
-For now, use Agent Council from Claude Code with `/council`.
-EOF
-  echo "✓ Codex placeholder installed to $CODEX_DIR"
+  install_skills "$HOME/.agents/skills" "Codex"
 fi
 
-# Install Gemini placeholder
+# Gemini CLI: ~/.gemini/skills/
 if command -v gemini &>/dev/null; then
-  GEMINI_DIR="$HOME/.gemini/skills"
-  mkdir -p "$GEMINI_DIR"
-  cat > "$GEMINI_DIR/agent-council.md" << 'EOF'
-# Agent Council (Gemini)
-Phase 2: Gemini as chairman support coming.
-For now, use Agent Council from Claude Code with `/council`.
-EOF
-  echo "✓ Gemini placeholder installed to $GEMINI_DIR"
+  install_skills "$HOME/.gemini/skills" "Gemini"
+fi
+
+if [ -n "$INSTALLED_TO" ]; then
+  echo "  Commands: /council, /council-list, /council-replay, /council-revisit, /council-outcome"
+  echo "  + ambient nudge awareness (agent-council-nudge)"
+else
+  echo "Warning: No CLI agents found. Install skills manually after installing a CLI agent."
 fi
 
 # Create council home directory
