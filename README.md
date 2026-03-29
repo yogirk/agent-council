@@ -9,11 +9,17 @@ Inspired by [Karpathy's LLM Council](https://github.com/karpathy/llm-council), a
 ```
 
 ```
-Dispatching Stage 1 to 2 agents in parallel...
-  - codex
-  - gemini
+Dispatching Stage 1 to 3 agents in parallel...
+  - claude (timeout: 120s)
+  - codex (timeout: 120s)
+  - gemini (timeout: 180s)
+  claude responded (38.2s)
+  codex responded (52.1s)
+  Quorum reached (2/3). Giving stragglers 30s grace...
+  gemini responded (64.7s)
+  All 3 agents responded.
 
-Stage 1 complete: 2/2 successful opinions
+Stage 1 complete: 3/3 successful opinions
 
 --- CHAIRMAN SYNTHESIS (claude) ---
 
@@ -22,6 +28,7 @@ All agents agree: Postgres is the right choice given strong consistency
 requirements and team SQL experience.
 
 ### Divergence
+Claude emphasizes ACID guarantees as non-negotiable for account balances.
 Codex flags a scaling ceiling at ~10TB without sharding.
 Gemini suggests read replicas as a scaling bridge.
 
@@ -54,11 +61,14 @@ Requirements: [Bun](https://bun.sh) + at least 2 of these CLI agents:
 
 ## Usage
 
-### From Claude Code (skill)
+### From Claude Code (skills)
 ```
 /council "Should we use WebSockets or SSE for real-time updates?"
 /council --with-review "Review auth middleware for security issues"
 /council --quick "What's the best job queue for Node.js?"
+
+/council-list                              # List all past sessions
+/council-replay council-20260329-143000    # Replay a session in terminal
 ```
 
 ### From the command line
@@ -107,15 +117,15 @@ bin/council replay council-20260329-143000 --project myapp
                     +------------------+
 ```
 
-**Stage 1:** All agents answer independently, in parallel. Each gets your question + codebase context. No visibility into what others are producing.
+**Stage 1:** ALL agents (including the chairman) answer independently, in parallel. Each gets your question + codebase context. No visibility into what others are producing. Once a quorum of opinions arrives, a grace window starts for slower agents.
 
 **Stage 2** (optional): Each agent reviews the others' anonymized opinions. Scores them on correctness, completeness, and feasibility. Produces a ranking.
 
-**Stage 3:** The chairman (whichever CLI you invoked from) synthesizes: where they agree, where they diverge, and a final recommendation with confidence level.
+**Stage 3:** The chairman (whichever CLI you invoked from) reads all opinions (including its own from Stage 1) and synthesizes: where they agree, where they diverge, and a final recommendation with confidence level. When agents fundamentally disagree, the synthesis flags it explicitly with per-agent confidence so you can decide.
 
 ## Configuration
 
-Create `~/.council/config.json` to customize models and timeout:
+Create `~/.council/config.json` to customize models, timeouts, and quorum behavior:
 
 ```json
 {
@@ -124,11 +134,19 @@ Create `~/.council/config.json` to customize models and timeout:
     "codex": "gpt-5.4",
     "gemini": "gemini-3.1-pro"
   },
-  "timeout_ms": 120000
+  "timeout_ms": {
+    "claude": 120000,
+    "codex": 120000,
+    "gemini": 180000
+  },
+  "quorum_grace_ms": 30000
 }
 ```
 
 All fields are optional. Missing fields use the defaults shown above.
+
+- **timeout_ms**: Per-agent timeout in milliseconds. Gemini defaults to 180s (it's slower). Can also be a single number applied to all agents.
+- **quorum_grace_ms**: Once enough agents respond (quorum), stragglers get this grace window before the council proceeds without them. Default: 30s.
 
 ## Storage
 
@@ -141,7 +159,13 @@ Council sessions are stored in `~/.council/{project}/`. Each session contains:
 
 ## Viewer
 
-Every council session generates a self-contained HTML viewer. Open it in your browser to explore the full deliberation with expandable stages, confidence indicators, and duration timings.
+Every council session generates a self-contained HTML viewer. Open it in your browser to explore:
+
+- **Side-by-side agent cards** with color-coded borders (purple for Claude, green for Codex, blue for Gemini)
+- **Stage tabs**: Opinions | Reviews | Synthesis
+- **Summary bar** with opinion count, mode, wall clock time, confidence
+- **Collapsible sections** for reasoning, trade-offs, and dissent points within each card
+- **Synthesis panel** showing the chairman's consensus, divergence, and recommendation
 
 ## Use Cases
 

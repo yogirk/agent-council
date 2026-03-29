@@ -4,6 +4,19 @@ import { resolve } from "path";
 
 export type AgentId = "claude" | "codex" | "gemini";
 
+export interface SessionMeta {
+  id: string;
+  question: string;
+  project: string;
+  chairman: AgentId;
+  members: AgentId[];
+  mode: "fast" | "thorough" | "quick";
+  created_at: string;
+  context_files: string[];
+  parent_id: string | null;
+  revisits: string[];
+}
+
 export interface AgentResult {
   agent: AgentId;
   model?: string;

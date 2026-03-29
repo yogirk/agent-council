@@ -37,9 +37,11 @@ if command -v claude &>/dev/null; then
   SKILL_DIR="$HOME/.claude/skills/agent-council"
   mkdir -p "$SKILL_DIR"
   cp "$SCRIPT_DIR/skills/claude-code/SKILL.md" "$SKILL_DIR/SKILL.md"
+  cp "$SCRIPT_DIR/skills/claude-code/council-list.md" "$SKILL_DIR/council-list.md"
+  cp "$SCRIPT_DIR/skills/claude-code/council-replay.md" "$SKILL_DIR/council-replay.md"
   # Create a symlink to bin/council so the skill can find it
   ln -sf "$SCRIPT_DIR/bin/council" "$SKILL_DIR/council"
-  echo "✓ Claude Code skill installed to $SKILL_DIR"
+  echo "✓ Claude Code skills installed to $SKILL_DIR (/council, /council-list, /council-replay)"
 fi
 
 # Install Codex placeholder

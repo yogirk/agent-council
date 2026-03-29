@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { resolve, basename, join } from "path";
+import { homedir } from "os";
 import {
   type AgentAdapter,
   type AgentId,
   type AgentResult,
+  type SessionMeta,
   detectAgents,
   allAdapters,
 } from "./adapters";
@@ -14,23 +16,17 @@ import { generateViewer } from "./viewer";
 
 interface CouncilConfig {
   models: Record<string, string>;
-  timeout_ms: number;
-}
-
-interface SessionMeta {
-  id: string;
-  question: string;
-  project: string;
-  chairman: AgentId;
-  members: AgentId[];
-  mode: "fast" | "thorough" | "quick";
-  created_at: string;
-  context_files: string[];
-  parent_id: string | null;
-  revisits: string[];
+  timeout_ms: Record<string, number>;
+  quorum_grace_ms: number;
 }
 
 // --- Config ---
+
+const DEFAULT_TIMEOUTS: Record<string, number> = {
+  claude: 120_000,
+  codex: 120_000,
+  gemini: 180_000,
+};
 
 const DEFAULT_CONFIG: CouncilConfig = {
   models: {
@@ -38,23 +34,36 @@ const DEFAULT_CONFIG: CouncilConfig = {
     codex: "gpt-5.4",
     gemini: "gemini-3.1-pro",
   },
-  timeout_ms: 120_000,
+  timeout_ms: { ...DEFAULT_TIMEOUTS },
+  quorum_grace_ms: 30_000,
 };
 
+function councilHome(): string {
+  return resolve(homedir(), ".council");
+}
+
 function loadConfig(): CouncilConfig {
-  const configPath = resolve(
-    process.env.HOME || "~",
-    ".council",
-    "config.json"
-  );
+  const configPath = resolve(councilHome(), "config.json");
   if (!existsSync(configPath)) return DEFAULT_CONFIG;
 
   try {
     const raw = readFileSync(configPath, "utf-8");
     const parsed = JSON.parse(raw);
+
+    // timeout_ms can be a number (applied to all) or per-agent object
+    let timeouts = { ...DEFAULT_TIMEOUTS };
+    if (parsed.timeout_ms) {
+      if (typeof parsed.timeout_ms === "number") {
+        timeouts = { claude: parsed.timeout_ms, codex: parsed.timeout_ms, gemini: parsed.timeout_ms };
+      } else if (typeof parsed.timeout_ms === "object") {
+        timeouts = { ...DEFAULT_TIMEOUTS, ...parsed.timeout_ms };
+      }
+    }
+
     return {
       models: { ...DEFAULT_CONFIG.models, ...(parsed.models || {}) },
-      timeout_ms: parsed.timeout_ms || DEFAULT_CONFIG.timeout_ms,
+      timeout_ms: timeouts,
+      quorum_grace_ms: parsed.quorum_grace_ms || DEFAULT_CONFIG.quorum_grace_ms,
     };
   } catch (e: any) {
     console.error(`Warning: Failed to parse ${configPath}: ${e.message}. Using defaults.`);
@@ -123,38 +132,95 @@ async function dispatchAgent(
   }
 }
 
-// --- Stage 1: Independent Opinions ---
+// --- Stage 1: Independent Opinions (with quorum + grace window) ---
+
+async function dispatchWithQuorum(
+  members: AgentAdapter[],
+  prompt: string,
+  repoRoot: string,
+  timeouts: Record<string, number>,
+  gracePeriodMs: number,
+  stageName: string
+): Promise<AgentResult[]> {
+  const quorum = Math.max(2, members.length - 1); // need N-1 or at least 2
+
+  console.error(`Dispatching ${stageName} to ${members.length} agents in parallel...`);
+  for (const m of members) {
+    console.error(`  - ${m.id} (timeout: ${(timeouts[m.id] || 120000) / 1000}s)`);
+  }
+
+  // Track results as they arrive
+  const results: (AgentResult | null)[] = new Array(members.length).fill(null);
+  let successCount = 0;
+  let completedCount = 0;
+  let graceTimer: ReturnType<typeof setTimeout> | null = null;
+
+  return new Promise<AgentResult[]>((resolveAll) => {
+    let resolved = false;
+
+    function tryResolve(reason: string) {
+      if (resolved) return;
+      resolved = true;
+      if (graceTimer) clearTimeout(graceTimer);
+      console.error(`  ${reason}`);
+
+      // Fill in any still-pending agents as timeouts
+      const final = results.map((r, i) => {
+        if (r) return r;
+        return {
+          agent: members[i].id,
+          status: "timeout" as const,
+          structured: false,
+          response: "",
+          error: "Skipped (quorum reached, grace period expired)",
+          duration_ms: 0,
+          timestamp: new Date().toISOString(),
+        };
+      });
+      resolveAll(final);
+    }
+
+    members.forEach((adapter, i) => {
+      const agentTimeout = timeouts[adapter.id] || 120_000;
+      dispatchAgent(adapter, prompt, repoRoot, agentTimeout).then((result) => {
+        results[i] = result;
+        completedCount++;
+        if (result.status === "ok") {
+          successCount++;
+          console.error(`  ${adapter.id} responded (${(result.duration_ms / 1000).toFixed(1)}s)`);
+        } else {
+          console.error(`  ${adapter.id} ${result.status}: ${result.error}`);
+        }
+
+        // All done
+        if (completedCount === members.length) {
+          tryResolve(`All ${members.length} agents responded.`);
+          return;
+        }
+
+        // Quorum reached, start grace window for stragglers
+        if (successCount >= quorum && !graceTimer && !resolved) {
+          const remaining = members.length - completedCount;
+          console.error(`  Quorum reached (${successCount}/${members.length}). Giving stragglers ${gracePeriodMs / 1000}s grace...`);
+          graceTimer = setTimeout(() => {
+            tryResolve(`Grace period expired. ${remaining} agent(s) still pending.`);
+          }, gracePeriodMs);
+        }
+      });
+    });
+  });
+}
 
 async function runStage1(
   members: AgentAdapter[],
   question: string,
   context: string,
   repoRoot: string,
-  timeoutMs: number
+  timeouts: Record<string, number>,
+  gracePeriodMs: number
 ): Promise<AgentResult[]> {
   const prompt = stage1Prompt(question, context);
-
-  console.error(`Dispatching Stage 1 to ${members.length} agents in parallel...`);
-  for (const m of members) {
-    console.error(`  - ${m.id}`);
-  }
-
-  const results = await Promise.allSettled(
-    members.map((adapter) => dispatchAgent(adapter, prompt, repoRoot, timeoutMs))
-  );
-
-  return results.map((r, i) => {
-    if (r.status === "fulfilled") return r.value;
-    return {
-      agent: members[i].id,
-      status: "error" as const,
-      structured: false,
-      response: "",
-      error: r.reason?.message || "Unknown error",
-      duration_ms: 0,
-      timestamp: new Date().toISOString(),
-    };
-  });
+  return dispatchWithQuorum(members, prompt, repoRoot, timeouts, gracePeriodMs, "Stage 1");
 }
 
 // --- Stage 2: Anonymized Peer Review ---
@@ -180,29 +246,12 @@ async function runStage2(
   question: string,
   opinions: AgentResult[],
   repoRoot: string,
-  timeoutMs: number
+  timeouts: Record<string, number>,
+  gracePeriodMs: number
 ): Promise<AgentResult[]> {
   const { anonymized } = anonymizeOpinions(opinions);
   const prompt = stage2Prompt(question, anonymized);
-
-  console.error(`Dispatching Stage 2 peer review to ${members.length} agents...`);
-
-  const results = await Promise.allSettled(
-    members.map((adapter) => dispatchAgent(adapter, prompt, repoRoot, timeoutMs))
-  );
-
-  return results.map((r, i) => {
-    if (r.status === "fulfilled") return r.value;
-    return {
-      agent: members[i].id,
-      status: "error" as const,
-      structured: false,
-      response: "",
-      error: r.reason?.message || "Unknown error",
-      duration_ms: 0,
-      timestamp: new Date().toISOString(),
-    };
-  });
+  return dispatchWithQuorum(members, prompt, repoRoot, timeouts, gracePeriodMs, "Stage 2");
 }
 
 // --- Storage ---
@@ -211,26 +260,25 @@ function createSessionDir(project: string): { sessionId: string; sessionDir: str
   const now = new Date();
   const ts = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   const sessionId = `council-${ts}`;
-  const councilHome = resolve(process.env.HOME || "~", ".council", project);
+  const councilHome = resolve(councilHome(), project);
   const sessionDir = resolve(councilHome, sessionId);
 
   mkdirSync(resolve(sessionDir, "stage1"), { recursive: true });
   return { sessionId, sessionDir };
 }
 
-function writeJson(dir: string, filename: string, data: any): void {
+async function writeJson(dir: string, filename: string, data: any): Promise<void> {
   const tmpPath = resolve(dir, `.${filename}.tmp`);
   const finalPath = resolve(dir, filename);
-  Bun.write(tmpPath, JSON.stringify(data, null, 2));
-  // Atomic rename to prevent partial writes
-  const fs = require("fs");
-  fs.renameSync(tmpPath, finalPath);
+  await Bun.write(tmpPath, JSON.stringify(data, null, 2));
+  const { renameSync } = await import("fs");
+  renameSync(tmpPath, finalPath);
 }
 
 // --- CLI: list and replay ---
 
 function listSessions(project: string): void {
-  const councilHome = resolve(process.env.HOME || "~", ".council", project);
+  const councilHome = resolve(councilHome(), project);
   if (!existsSync(councilHome)) {
     console.log("No council sessions found.");
     return;
@@ -266,12 +314,7 @@ function listSessions(project: string): void {
 }
 
 function replaySession(project: string, sessionId: string): void {
-  const sessionDir = resolve(
-    process.env.HOME || "~",
-    ".council",
-    project,
-    sessionId
-  );
+  const sessionDir = resolve(councilHome(), project, sessionId);
 
   if (!existsSync(sessionDir)) {
     console.error(`Session not found: ${sessionId}`);
@@ -335,7 +378,7 @@ function replaySession(project: string, sessionId: string): void {
 // --- CLI Arg Parsing ---
 
 function parseArgs(): {
-  command: "run" | "list" | "replay" | "view";
+  command: "run" | "list" | "replay";
   chairman: AgentId;
   questionFile?: string;
   project: string;
@@ -366,10 +409,8 @@ function parseArgs(): {
       sessionId,
     };
   }
-  if (args[0] === "view") {
-    const project = getFlag(args, "--project") || detectProjectSlug();
-    return { command: "view", chairman: "claude", project, mode: "fast", contextFiles: [] };
-  }
+  // "view" is handled by opening the viewer.html file directly in a browser.
+  // No subcommand needed — the path is printed after each council run.
 
   // Default: run a council session
   const questionFile = getFlag(args, "--question-file");
@@ -473,11 +514,13 @@ async function main(): Promise<void> {
   console.error(`Detected agents: ${availableIds.join(", ")}`);
   console.error(`Chairman: ${parsed.chairman}`);
 
-  // Exclude chairman from dispatch members
-  const members = available.filter((a) => a.id !== parsed.chairman);
+  // ALL agents participate in Stage 1 (including the chairman).
+  // The chairman also synthesizes in Stage 3 via the SKILL.md.
+  const members = available;
 
-  if (members.length === 0) {
-    console.error("Error: No non-chairman agents available to dispatch.");
+  // We need at least 2 agents total for a meaningful council
+  if (members.length < 2) {
+    console.error("Error: Agent Council requires at least 2 agents for deliberation.");
     process.exit(1);
   }
 
@@ -495,12 +538,13 @@ async function main(): Promise<void> {
     question,
     context,
     repoRoot,
-    config.timeout_ms
+    config.timeout_ms,
+    config.quorum_grace_ms
   );
 
   // Write opinion files
   for (const opinion of opinions) {
-    writeJson(
+    await writeJson(
       resolve(sessionDir, "stage1"),
       `opinion_${opinion.agent}.json`,
       opinion
@@ -514,7 +558,7 @@ async function main(): Promise<void> {
 
   if (successfulOpinions.length === 0) {
     console.error("Error: All agents failed. Council cannot convene.");
-    writeJson(sessionDir, "meta.json", {
+    await writeJson(sessionDir, "meta.json", {
       id: sessionId,
       question,
       project: parsed.project,
@@ -540,11 +584,12 @@ async function main(): Promise<void> {
       question,
       successfulOpinions,
       repoRoot,
-      config.timeout_ms
+      config.timeout_ms,
+      config.quorum_grace_ms
     );
 
     for (const review of reviews) {
-      writeJson(
+      await writeJson(
         resolve(sessionDir, "stage2"),
         `review_${review.agent}.json`,
         review
@@ -570,7 +615,7 @@ async function main(): Promise<void> {
     parent_id: null,
     revisits: [],
   };
-  writeJson(sessionDir, "meta.json", meta);
+  await writeJson(sessionDir, "meta.json", meta);
 
   // Generate viewer
   generateViewer(sessionDir, meta, opinions);
