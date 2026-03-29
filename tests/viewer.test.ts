@@ -48,51 +48,55 @@ function mockOpinion(agent: string, status: "ok" | "error" = "ok"): AgentResult 
 }
 
 describe("generateViewer", () => {
-  test("generates valid HTML with new layout", () => {
-    const meta = mockMeta();
-    generateViewer(tmpDir, meta, [mockOpinion("codex"), mockOpinion("gemini")]);
+  test("generates valid HTML with new design", () => {
+    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex"), mockOpinion("gemini")]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    const viewerPath = resolve(tmpDir, "viewer.html");
-    expect(existsSync(viewerPath)).toBe(true);
-
-    const html = readFileSync(viewerPath, "utf-8");
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("Agent Council");
     expect(html).toContain("council-20260329-120000");
-    // No raw innerHTML usage
+    expect(html).toContain("DM Sans");
     expect(html).not.toContain(".innerHTML");
   });
 
-  test("renders side-by-side agent cards", () => {
+  test("renders agent stack layout", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex"), mockOpinion("gemini")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("cards-grid");
-    expect(html).toContain("agent-card");
-    expect(html).toContain("card-accent-codex");
-    expect(html).toContain("card-accent-gemini");
+    expect(html).toContain("agents-stack");
+    expect(html).toContain("agent-msg");
+    expect(html).toContain("agent-avatar");
   });
 
-  test("renders stage tabs", () => {
+  test("renders KPI strip and verdict", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("Opinions");
-    expect(html).toContain("Reviews");
-    expect(html).toContain("Synthesis");
-    expect(html).toContain("tab-content");
+    expect(html).toContain("kpi-strip");
+    expect(html).toContain("verdict");
+    expect(html).toContain("Council Verdict");
   });
 
-  test("renders summary bar with stats", () => {
-    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex"), mockOpinion("gemini")]);
+  test("includes dark mode toggle and CSS variables", () => {
+    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("summary-bar");
-    expect(html).toContain("successCount");
+    expect(html).toContain("themeToggle");
+    expect(html).toContain("html.dark");
+    expect(html).toContain("prefers-color-scheme");
+  });
+
+  test("includes depth tabs (Reasoning, Trade-offs, Full Response)", () => {
+    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
+
+    expect(html).toContain("depth-tabs");
+    expect(html).toContain("Reasoning");
+    expect(html).toContain("Trade-offs");
+    expect(html).toContain("Full Response");
   });
 
   test("includes synthesis when synthesis.json exists", () => {
-    const meta = mockMeta();
     const synthesis = {
       chairman: "claude",
       consensus: "All agree on Postgres",
@@ -103,10 +107,9 @@ describe("generateViewer", () => {
     };
     writeFileSync(resolve(tmpDir, "synthesis.json"), JSON.stringify(synthesis));
 
-    generateViewer(tmpDir, meta, [mockOpinion("codex")]);
+    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("Chairman Synthesis");
     expect(html).toContain("All agree on Postgres");
   });
 
@@ -122,28 +125,32 @@ describe("generateViewer", () => {
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
     expect(html).toContain("Timeout after 120s");
-    expect(html).toContain("card-error");
   });
 
   test("escapes script-breaking content in JSON", () => {
-    const meta = mockMeta({
-      question: 'What about </script><script>alert("xss")</script>?',
-    });
+    const meta = mockMeta({ question: 'What about </script><script>alert("xss")</script>?' });
     const opinion = mockOpinion("codex");
     opinion.response = 'Use <script>evil()</script> carefully';
 
     generateViewer(tmpDir, meta, [opinion]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    // The </script> in data should be escaped
     expect(html.match(/<\/script>/g)?.length).toBe(1);
   });
 
-  test("responsive grid class present", () => {
+  test("responsive breakpoint present", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
     expect(html).toContain("@media (max-width: 768px)");
-    expect(html).toContain("grid-template-columns: 1fr");
+  });
+
+  test("shows outcome banner when outcome exists", () => {
+    const meta = mockMeta({ outcome: { result: "It worked great", recorded_at: "2026-04-15T10:00:00Z" } });
+    generateViewer(tmpDir, meta, [mockOpinion("codex")]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
+
+    expect(html).toContain("outcome-banner");
+    expect(html).toContain("It worked great");
   });
 });

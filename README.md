@@ -175,11 +175,13 @@ Council sessions are stored in `~/.council/{project}/`. Each session contains:
 
 Every council session generates a self-contained HTML viewer. Open it in your browser to explore:
 
-- **Side-by-side agent cards** with color-coded borders (purple for Claude, green for Codex, blue for Gemini)
-- **Stage tabs**: Opinions | Reviews | Synthesis
-- **Summary bar** with opinion count, mode, wall clock time, confidence
-- **Collapsible sections** for reasoning, trade-offs, and dissent points within each card
-- **Synthesis panel** showing the chairman's consensus, divergence, and recommendation
+- **Verdict-first layout** with KPI strip (agents, consensus, confidence, wall clock)
+- **Progressive depth**: recommendation always visible, then Reasoning / Trade-offs / Full Response as tabbed layers
+- **Light and dark mode** with toggle (respects system preference)
+- **Agent identity** via colored geometric icons (⬢ Claude, ⬣ Codex, ◆ Gemini)
+- **Outcome banners** when a decision outcome has been recorded
+- **Revisit comparison** side-by-side when viewing a revisited session
+- **DM Sans typography**, responsive layout, XSS-safe rendering
 
 ## Does It Work?
 

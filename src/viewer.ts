@@ -66,32 +66,22 @@ interface ParentSessionData {
 }
 
 function loadParentSession(sessionDir: string, parentId: string): ParentSessionData | null {
-  // Parent dir is a sibling of the current session dir
   const projectDir = dirname(sessionDir);
   const parentDir = resolve(projectDir, parentId);
   if (!existsSync(parentDir)) return null;
-
   try {
     const metaPath = resolve(parentDir, "meta.json");
     if (!existsSync(metaPath)) return null;
     const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
-
     const stage1Dir = resolve(parentDir, "stage1");
     const opinions = existsSync(stage1Dir)
       ? readdirSync(stage1Dir)
           .filter((f) => f.startsWith("opinion_") && f.endsWith(".json"))
           .map((f) => {
             const op = JSON.parse(readFileSync(resolve(stage1Dir, f), "utf-8"));
-            return {
-              agent: op.agent,
-              status: op.status,
-              recommendation: op.recommendation,
-              confidence: op.confidence,
-              response: op.response,
-            };
+            return { agent: op.agent, status: op.status, recommendation: op.recommendation, confidence: op.confidence, response: op.response };
           })
       : [];
-
     const synthesis = loadSynthesis(parentDir);
     return { meta, opinions, synthesis };
   } catch {
@@ -110,11 +100,7 @@ export function generateViewer(
   const reviews = loadReviews(sessionDir);
   const totalDuration = opinions.reduce((sum, o) => Math.max(sum, o.duration_ms), 0);
   const successCount = opinions.filter((o) => o.status === "ok").length;
-
-  // Load parent session if this is a revisit
-  const parentSession = meta.parent_id
-    ? loadParentSession(sessionDir, meta.parent_id)
-    : null;
+  const parentSession = meta.parent_id ? loadParentSession(sessionDir, meta.parent_id) : null;
 
   const viewerData = {
     meta,
@@ -132,12 +118,7 @@ export function generateViewer(
       duration_ms: o.duration_ms,
     })),
     synthesis,
-    reviews: reviews.map((r) => ({
-      agent: r.agent,
-      status: r.status,
-      response: r.response,
-      duration_ms: r.duration_ms,
-    })),
+    reviews: reviews.map((r) => ({ agent: r.agent, status: r.status, response: r.response, duration_ms: r.duration_ms })),
     parentSession,
     totalDuration,
     successCount,
@@ -146,628 +127,361 @@ export function generateViewer(
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Council: ${escapeHtml(meta.question.slice(0, 60))}</title>
-  <style>
-    :root {
-      --bg: #0d1117;
-      --bg-card: #161b22;
-      --bg-hover: #1c2128;
-      --border: #30363d;
-      --border-light: #21262d;
-      --text: #c9d1d9;
-      --text-bright: #f0f6fc;
-      --text-muted: #8b949e;
-      --text-dim: #484f58;
-      --green: #3fb950;
-      --green-bg: #1a3a2a;
-      --amber: #d29922;
-      --amber-bg: #3a2a1a;
-      --red: #f85149;
-      --red-bg: #3a1a1a;
-      --purple: #b47eff;
-      --blue: #58a6ff;
-      --radius: 8px;
-      --radius-sm: 4px;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Council: ${escapeHtml(meta.question.slice(0, 60))}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #ffffff; --bg-subtle: #f7f7f8; --bg-hover: #f0f0f2;
+    --border: #e5e5e7; --border-light: #eeeff1;
+    --text: #1d1d1f; --text-secondary: #6e6e73; --text-tertiary: #aeaeb2; --text-dim: #c7c7cc;
+    --green: #28a745; --green-light: #dcfce7;
+    --amber: #b45309; --amber-light: #fef3c7;
+    --purple: #7c3aed; --blue: #2563eb; --teal: #0d9488;
+    --raw-bg: #f7f7f8;
+  }
+  html.dark {
+    --bg: #111113; --bg-subtle: #1a1a1e; --bg-hover: #222228;
+    --border: #2a2a2e; --border-light: #222226;
+    --text: #e4e4e7; --text-secondary: #a1a1a6; --text-tertiary: #63636a; --text-dim: #45454a;
+    --green: #4ade80; --green-light: rgba(74,222,128,0.1);
+    --amber: #fbbf24; --amber-light: rgba(251,191,36,0.1);
+    --raw-bg: #151518;
+  }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
-      min-height: 100vh;
-    }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; -webkit-font-smoothing: antialiased; }
+  .container { max-width: 1080px; margin: 0 auto; padding: 2.5rem 2.5rem 4rem; }
 
-    .container { max-width: 1100px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .report-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-light); }
+  .report-bar-left { display: flex; align-items: center; gap: 0.75rem; }
+  .report-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+  .report-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; color: var(--text-secondary); }
+  .report-meta { font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--text-tertiary); }
 
-    /* --- Header --- */
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-    .header-left { display: flex; align-items: center; gap: 0.6rem; }
-    .logo { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); }
-    .title { font-size: 0.85rem; font-weight: 600; color: var(--text-muted); letter-spacing: 0.05em; text-transform: uppercase; }
-    .session-id { font-size: 0.75rem; color: var(--text-dim); font-family: "SF Mono", "Fira Code", monospace; }
+  .kpi-strip { display: flex; gap: 0; margin-bottom: 2rem; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .kpi { flex: 1; padding: 0.75rem 1rem; border-right: 1px solid var(--border-light); text-align: center; }
+  .kpi:last-child { border-right: none; }
+  .kpi-val { font-size: 1.1rem; font-weight: 700; color: var(--text); }
+  .kpi-val.green { color: var(--green); }
+  .kpi-val.amber { color: var(--amber); }
+  .kpi-label { font-size: 0.6rem; color: var(--text-tertiary); letter-spacing: 0.03em; margin-top: 0.1rem; }
 
-    /* --- Question --- */
-    .question-block {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.25rem 1.5rem;
-      margin-bottom: 1.25rem;
-      font-size: 1.15rem;
-      font-weight: 500;
-      color: var(--text-bright);
-      line-height: 1.5;
-    }
+  .question { font-size: 1.65rem; font-weight: 700; color: var(--text); line-height: 1.35; margin-bottom: 2rem; letter-spacing: -0.015em; }
 
-    /* --- Summary bar --- */
-    .summary-bar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1.25rem;
-      padding: 0.75rem 0;
-      margin-bottom: 1.25rem;
-      border-bottom: 1px solid var(--border-light);
-    }
-    .stat { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; color: var(--text-muted); }
-    .stat-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .stat-dot.green { background: var(--green); }
-    .stat-dot.amber { background: var(--amber); }
-    .stat-dot.red { background: var(--red); }
-    .stat-dot.blue { background: var(--blue); }
-    .confidence-badge {
-      font-size: 0.7rem;
-      font-weight: 600;
-      padding: 2px 8px;
-      border-radius: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-    .confidence-high { background: var(--green-bg); color: var(--green); }
-    .confidence-medium { background: var(--amber-bg); color: var(--amber); }
-    .confidence-low { background: var(--red-bg); color: var(--red); }
+  .outcome-banner { background: var(--amber-light); border: 1px solid var(--border); border-radius: 10px; padding: 0.75rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.75rem; }
+  .outcome-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); flex-shrink: 0; }
+  .outcome-text { font-size: 0.85rem; color: var(--text); flex: 1; }
+  .outcome-date { font-size: 0.62rem; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
 
-    /* --- Stage tabs --- */
-    .tabs {
-      display: flex;
-      gap: 0;
-      margin-bottom: 1.5rem;
-      border-bottom: 1px solid var(--border-light);
-    }
-    .tab {
-      padding: 0.6rem 1.25rem;
-      font-size: 0.8rem;
-      font-weight: 500;
-      color: var(--text-muted);
-      cursor: pointer;
-      border-bottom: 2px solid transparent;
-      transition: color 0.15s, border-color 0.15s;
-      user-select: none;
-    }
-    .tab:hover { color: var(--text); }
-    .tab.active { color: var(--text-bright); border-bottom-color: var(--blue); }
-    .tab.disabled { opacity: 0.3; cursor: default; }
-    .tab-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 0.4rem; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; animation: fadeIn 0.2s ease; }
-    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .verdict { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; margin-bottom: 2.5rem; }
+  .verdict-label { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--green); margin-bottom: 0.5rem; }
+  .verdict-pending { font-size: 0.9rem; color: var(--text-tertiary); font-style: italic; }
+  .verdict-text { font-size: 1.1rem; font-weight: 500; color: var(--text); line-height: 1.55; }
+  .verdict-findings { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-light); }
+  .vf-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 0.25rem; }
+  .vf-label.consensus { color: var(--green); }
+  .vf-label.divergence { color: var(--amber); }
+  .vf-text { font-size: 0.82rem; color: var(--text-secondary); }
 
-    /* --- Agent cards grid --- */
-    .cards-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-      gap: 1rem;
-    }
+  .section-header { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.75rem; }
+  .section-header::after { content: ""; flex: 1; height: 1px; background: var(--border-light); }
 
-    .agent-card {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
-      transition: border-color 0.15s;
-    }
-    .agent-card:hover { border-color: #444c56; }
+  .agents-stack { display: flex; flex-direction: column; gap: 1.25rem; }
+  .agent-msg { }
+  .agent-bar { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; }
+  .agent-avatar { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; flex-shrink: 0; }
+  .agent-avatar.claude { color: var(--purple); }
+  .agent-avatar.codex { color: var(--teal); }
+  .agent-avatar.gemini { color: var(--blue); }
+  .agent-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+  .agent-meta { font-size: 0.62rem; color: var(--text-tertiary); }
+  .agent-conf-tag { font-size: 0.55rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; background: var(--green-light); color: var(--green); }
+  .agent-error-tag { font-size: 0.55rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; background: rgba(248,81,73,0.1); color: #f85149; }
 
-    .card-header {
-      padding: 0.875rem 1rem;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--border-light);
-    }
-    .card-header-left { display: flex; align-items: center; gap: 0.5rem; }
-    .agent-badge {
-      font-size: 0.7rem;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: var(--radius-sm);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .agent-claude { background: rgba(180, 126, 255, 0.15); color: var(--purple); }
-    .agent-codex { background: rgba(63, 185, 80, 0.15); color: var(--green); }
-    .agent-gemini { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
-    .card-accent-claude { border-left: 3px solid var(--purple); }
-    .card-accent-codex { border-left: 3px solid var(--green); }
-    .card-accent-gemini { border-left: 3px solid var(--blue); }
-    .card-duration { font-size: 0.75rem; color: var(--text-dim); font-family: "SF Mono", monospace; }
-    .card-status-error { color: var(--red); font-size: 0.75rem; font-weight: 600; }
+  .agent-rec { margin-top: 0.5rem; font-size: 0.95rem; color: var(--text); font-weight: 500; line-height: 1.55; margin-bottom: 0.35rem; }
+  .agent-error { margin-top: 0.5rem; font-size: 0.85rem; color: #f85149; }
 
-    .card-body { padding: 1rem; }
+  .agent-depth { border: 1px solid var(--border-light); border-radius: 8px; overflow: hidden; margin-top: 0.5rem; }
+  .depth-toggle { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; cursor: pointer; user-select: none; font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); background: var(--bg-subtle); }
+  .depth-toggle:hover { background: var(--bg-hover); }
+  .depth-chevron { font-size: 0.6rem; color: var(--text-dim); transition: transform 0.2s; }
+  .depth-chevron.open { transform: rotate(90deg); }
+  .depth-body { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
+  .depth-body.open { max-height: 5000px; }
 
-    /* --- Sections within card --- */
-    .card-recommendation {
-      font-size: 0.95rem;
-      color: var(--text-bright);
-      line-height: 1.5;
-      margin-bottom: 0.75rem;
-    }
+  .depth-tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border-light); background: var(--bg-subtle); }
+  .depth-tab { padding: 0.4rem 0.85rem; font-size: 0.62rem; font-weight: 600; color: var(--text-tertiary); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; user-select: none; }
+  .depth-tab:hover { color: var(--text-secondary); }
+  .depth-tab.active { color: var(--text); border-bottom-color: var(--text); }
+  .depth-panel { display: none; padding: 0.75rem; }
+  .depth-panel.active { display: block; }
 
-    .card-section {
-      border-top: 1px solid var(--border-light);
-      overflow: hidden;
-    }
-    .card-section-header {
-      padding: 0.5rem 0;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      user-select: none;
-    }
-    .card-section-header:hover { color: var(--text-bright); }
-    .card-section-title {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-    }
-    .card-section-count {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      background: var(--bg);
-      padding: 1px 6px;
-      border-radius: 8px;
-    }
-    .card-section-chevron {
-      font-size: 0.65rem;
-      color: var(--text-dim);
-      transition: transform 0.2s;
-    }
-    .card-section-chevron.open { transform: rotate(90deg); }
-    .card-section-body {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height 0.25s ease, padding 0.25s ease;
-    }
-    .card-section-body.open {
-      max-height: 800px;
-      padding-bottom: 0.5rem;
-    }
-    .card-section-body ul { padding-left: 1.25rem; }
-    .card-section-body li { margin-bottom: 0.3rem; font-size: 0.85rem; color: var(--text); }
-    .card-section-body p { font-size: 0.85rem; color: var(--text); white-space: pre-wrap; }
-    .card-error { padding: 1rem; color: var(--red); font-size: 0.85rem; }
+  .depth-section { margin-bottom: 0.75rem; }
+  .depth-section:last-child { margin-bottom: 0; }
+  .depth-section-label { font-size: 0.58rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 0.3rem; }
+  .depth-section-text { font-size: 0.88rem; color: var(--text-secondary); line-height: 1.6; }
+  .depth-section-text ul { padding-left: 1.25rem; }
+  .depth-section-text li { margin-bottom: 0.3rem; }
 
-    /* --- Synthesis panel --- */
-    .synthesis-panel {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.5rem;
-    }
-    .synthesis-label {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      margin-bottom: 0.75rem;
-    }
-    .synthesis-section { margin-bottom: 1.25rem; }
-    .synthesis-section-title {
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--blue);
-      margin-bottom: 0.35rem;
-    }
-    .synthesis-section-content { font-size: 0.9rem; color: var(--text); white-space: pre-wrap; line-height: 1.6; }
-    .synthesis-pending {
-      color: var(--text-dim);
-      font-style: italic;
-      padding: 2rem;
-      text-align: center;
-    }
+  .raw-text { font-size: 0.78rem; color: var(--text-secondary); white-space: pre-wrap; font-family: 'JetBrains Mono', monospace; line-height: 1.55; padding: 0.5rem 0; max-height: 500px; overflow-y: auto; }
 
-    /* --- Revisit diff --- */
-    .revisit-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
-    }
-    @media (max-width: 768px) {
-      .revisit-grid { grid-template-columns: 1fr; }
-    }
-    .revisit-col {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1rem;
-    }
-    .revisit-col-header {
-      font-size: 0.7rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 0.75rem;
-    }
-    .revisit-original .revisit-col-header { color: var(--text-muted); }
-    .revisit-current .revisit-col-header { color: var(--green); }
-    .revisit-item { margin-bottom: 0.75rem; }
-    .revisit-item-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
-    .revisit-item-value { font-size: 0.9rem; color: var(--text); margin-top: 0.2rem; }
+  .revisit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .revisit-col { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+  .revisit-col-header { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 0.75rem; }
+  .revisit-original .revisit-col-header { color: var(--text-tertiary); }
+  .revisit-current .revisit-col-header { color: var(--green); }
+  .revisit-item { margin-bottom: 0.75rem; }
+  .revisit-item-label { font-size: 0.6rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+  .revisit-item-value { font-size: 0.88rem; color: var(--text-secondary); margin-top: 0.2rem; }
 
-    /* --- Outcome badge --- */
-    .outcome-banner {
-      background: var(--bg-card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 0.75rem 1rem;
-      margin-bottom: 1.25rem;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
-    .outcome-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--amber); }
-    .outcome-text { font-size: 0.85rem; color: var(--text); }
-    .outcome-date { font-size: 0.7rem; color: var(--text-dim); margin-left: auto; }
+  .theme-toggle { width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-subtle); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; transition: background 0.15s; color: var(--text-secondary); }
+  .theme-toggle:hover { background: var(--bg-hover); }
 
-    /* --- Footer --- */
-    .footer {
-      margin-top: 2.5rem;
-      padding-top: 1rem;
-      border-top: 1px solid var(--border-light);
-      display: flex;
-      justify-content: space-between;
-      font-size: 0.7rem;
-      color: var(--text-dim);
-      font-family: "SF Mono", monospace;
-    }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border-light); display: flex; justify-content: space-between; font-size: 0.6rem; color: var(--text-dim); }
 
-    /* --- Responsive --- */
-    @media (max-width: 768px) {
-      .container { padding: 1rem; }
-      .cards-grid { grid-template-columns: 1fr; }
-      .question-block { font-size: 1rem; }
-      .summary-bar { gap: 0.75rem; }
-    }
-  </style>
+  @media (max-width: 768px) {
+    .container { padding: 1.5rem 1rem; }
+    .question { font-size: 1.2rem; }
+    .kpi-strip { flex-wrap: wrap; }
+    .kpi { flex-basis: 50%; border-bottom: 1px solid var(--border-light); }
+    .verdict-findings { grid-template-columns: 1fr; }
+    .revisit-grid { grid-template-columns: 1fr; }
+  }
+</style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="header-left">
-        <div class="logo"></div>
-        <span class="title">Agent Council</span>
-      </div>
-      <span class="session-id" id="sessionId"></span>
+<div class="container">
+  <div class="report-bar">
+    <div class="report-bar-left">
+      <div class="report-dot"></div>
+      <span class="report-label">Agent Council</span>
     </div>
-    <div class="question-block" id="question"></div>
-    <div class="summary-bar" id="summaryBar"></div>
-    <div class="tabs" id="tabs"></div>
-    <div id="tabPanels"></div>
-    <div class="footer">
-      <span id="footerLeft"></span>
-      <span>Agent Council v0.1.0</span>
+    <div style="display:flex;align-items:center;gap:0.75rem;">
+      <span class="report-meta" id="meta"></span>
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode">\\u2600</button>
     </div>
   </div>
+  <div class="kpi-strip" id="kpis"></div>
+  <div id="outcomeBanner"></div>
+  <div class="question" id="question"></div>
+  <div class="verdict" id="verdict"></div>
+  <div class="section-header">Council Deliberation</div>
+  <div id="agents" class="agents-stack"></div>
+  <div id="revisitSection"></div>
+  <div class="footer">
+    <span id="footerLeft"></span>
+    <span>Agent Council v0.1.0</span>
+  </div>
+</div>
 
-  <script>
-    const DATA = ${escapeJsonForScript(viewerData)};
-    const AGENT_COLORS = { claude: 'purple', codex: 'codex', gemini: 'gemini' };
+<script>
+  const DATA = ${escapeJsonForScript(viewerData)};
+  const ICONS = { claude: '\\u2b22', codex: '\\u2b23', gemini: '\\u25c6' };
 
-    function setText(el, text) { el.textContent = text; }
-    function el(tag, cls, text) {
-      const e = document.createElement(tag);
-      if (cls) e.className = cls;
-      if (text) e.textContent = text;
-      return e;
+  function h(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  }
+
+  // Meta
+  document.getElementById('meta').textContent = DATA.meta.id + ' \\u00b7 ' + DATA.meta.created_at.split('T')[0];
+
+  // KPIs
+  const kpis = document.getElementById('kpis');
+  const confLevel = DATA.synthesis ? DATA.synthesis.confidence : (DATA.successCount > 0 ? 'pending' : 'none');
+  [
+    { val: DATA.successCount + '/' + DATA.opinions.length, label: 'Agents', cls: '' },
+    { val: DATA.successCount === DATA.opinions.length ? '100%' : Math.round(DATA.successCount / DATA.opinions.length * 100) + '%', label: 'Consensus', cls: 'green' },
+    { val: confLevel.charAt(0).toUpperCase() + confLevel.slice(1), label: 'Confidence', cls: confLevel === 'high' ? 'green' : confLevel === 'low' ? 'amber' : '' },
+    { val: (DATA.totalDuration / 1000).toFixed(0) + 's', label: 'Wall Clock', cls: 'amber' }
+  ].forEach(k => {
+    const d = h('div', 'kpi');
+    d.appendChild(h('div', 'kpi-val' + (k.cls ? ' ' + k.cls : ''), k.val));
+    d.appendChild(h('div', 'kpi-label', k.label));
+    kpis.appendChild(d);
+  });
+
+  // Outcome banner
+  if (DATA.meta.outcome) {
+    const banner = h('div', 'outcome-banner');
+    banner.appendChild(h('div', 'outcome-dot'));
+    banner.appendChild(h('div', 'outcome-text', DATA.meta.outcome.result));
+    banner.appendChild(h('div', 'outcome-date', DATA.meta.outcome.recorded_at.split('T')[0]));
+    document.getElementById('outcomeBanner').appendChild(banner);
+  }
+
+  // Question
+  document.getElementById('question').textContent = DATA.meta.question;
+
+  // Verdict
+  const vd = document.getElementById('verdict');
+  if (DATA.synthesis) {
+    vd.appendChild(h('div', 'verdict-label', 'Council Verdict'));
+    vd.appendChild(h('div', 'verdict-text', DATA.synthesis.recommendation));
+    const findings = h('div', 'verdict-findings');
+    const cf = h('div');
+    cf.appendChild(h('div', 'vf-label consensus', 'Consensus'));
+    cf.appendChild(h('div', 'vf-text', DATA.synthesis.consensus));
+    findings.appendChild(cf);
+    const df = h('div');
+    df.appendChild(h('div', 'vf-label divergence', 'Divergence'));
+    df.appendChild(h('div', 'vf-text', DATA.synthesis.divergence));
+    findings.appendChild(df);
+    vd.appendChild(findings);
+  } else {
+    vd.appendChild(h('div', 'verdict-label', 'Council Verdict'));
+    vd.appendChild(h('div', 'verdict-pending', 'Synthesis pending. The chairman will produce this after reviewing all opinions.'));
+  }
+
+  // Agents
+  const agents = document.getElementById('agents');
+  const sorted = [...DATA.opinions].sort((a, b) => a.duration_ms - b.duration_ms);
+
+  sorted.forEach(op => {
+    const msg = h('div', 'agent-msg');
+    const bar = h('div', 'agent-bar');
+    bar.appendChild(h('div', 'agent-avatar ' + op.agent, ICONS[op.agent] || '\\u25cf'));
+    bar.appendChild(h('span', 'agent-name', op.agent.charAt(0).toUpperCase() + op.agent.slice(1)));
+    bar.appendChild(h('span', 'agent-meta', (op.duration_ms / 1000).toFixed(1) + 's'));
+    if (op.status === 'ok') {
+      const confText = op.confidence ? op.confidence.toLowerCase().split(/[^a-z]/)[0] : '';
+      bar.appendChild(h('span', 'agent-conf-tag', confText.charAt(0).toUpperCase() + confText.slice(1) || 'OK'));
+    } else {
+      bar.appendChild(h('span', 'agent-error-tag', op.status.toUpperCase()));
     }
+    msg.appendChild(bar);
 
-    // --- Header ---
-    setText(document.getElementById('sessionId'), DATA.meta.id);
-    setText(document.getElementById('question'), DATA.meta.question);
+    if (op.status === 'ok') {
+      msg.appendChild(h('div', 'agent-rec', op.recommendation || op.response.slice(0, 200)));
 
-    // --- Summary bar ---
-    const bar = document.getElementById('summaryBar');
-    function addStat(dotClass, label) {
-      const s = el('div', 'stat');
-      const d = el('div', 'stat-dot ' + dotClass);
-      s.appendChild(d);
-      s.appendChild(el('span', null, label));
-      bar.appendChild(s);
-    }
-    addStat('green', DATA.successCount + '/' + DATA.opinions.length + ' opinions');
-    addStat('blue', DATA.meta.mode + ' mode');
-    addStat('blue', (DATA.totalDuration / 1000).toFixed(0) + 's wall clock');
-    addStat('green', DATA.meta.chairman + ' chairman');
+      const depth = h('div', 'agent-depth');
+      const toggle = h('div', 'depth-toggle');
+      toggle.appendChild(h('span', null, 'Explore reasoning'));
+      const chevron = h('span', 'depth-chevron', '\\u25b8');
+      toggle.appendChild(chevron);
+      depth.appendChild(toggle);
 
-    // --- Tabs ---
-    const tabsEl = document.getElementById('tabs');
-    const panelsEl = document.getElementById('tabPanels');
-    const tabDefs = [
-      { id: 'opinions', label: 'Opinions', dot: 'green', enabled: true },
-      { id: 'reviews', label: 'Reviews', dot: 'amber', enabled: DATA.reviews.length > 0 },
-      { id: 'synthesis', label: 'Synthesis', dot: 'blue', enabled: true },
-      { id: 'revisit', label: 'Revisit Diff', dot: 'purple', enabled: !!DATA.parentSession },
-    ];
+      const body = h('div', 'depth-body');
+      const tabBar = h('div', 'depth-tabs');
+      const panels = [];
 
-    tabDefs.forEach((td, i) => {
-      const tab = el('div', 'tab' + (i === 0 ? ' active' : '') + (!td.enabled ? ' disabled' : ''));
-      tab.dataset.tab = td.id;
-      const dot = el('span', 'tab-dot');
-      const dotColorMap = { green: 'green', amber: 'amber', blue: 'blue', purple: 'purple' };
-      dot.style.background = td.enabled ? 'var(--' + (dotColorMap[td.dot] || 'blue') + ')' : 'var(--text-dim)';
-      tab.appendChild(dot);
-      tab.appendChild(document.createTextNode(td.label));
-      if (td.enabled) {
-        tab.addEventListener('click', () => switchTab(td.id));
-      }
-      tabsEl.appendChild(tab);
-
-      const panel = el('div', 'tab-content' + (i === 0 ? ' active' : ''));
-      panel.id = 'panel-' + td.id;
-      panelsEl.appendChild(panel);
-    });
-
-    function switchTab(id) {
-      tabsEl.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === id));
-      panelsEl.querySelectorAll('.tab-content').forEach(p => p.classList.toggle('active', p.id === 'panel-' + id));
-    }
-
-    // --- Opinions panel ---
-    const opinionsPanel = document.getElementById('panel-opinions');
-    const grid = el('div', 'cards-grid');
-
-    DATA.opinions.forEach(op => {
-      const agentCls = AGENT_COLORS[op.agent] || 'codex';
-      const card = el('div', 'agent-card card-accent-' + agentCls);
-
-      // Card header
-      const header = el('div', 'card-header');
-      const headerLeft = el('div', 'card-header-left');
-      headerLeft.appendChild(el('span', 'agent-badge agent-' + agentCls, op.agent.toUpperCase()));
-
-      if (op.status === 'ok' && op.confidence) {
-        const confLevel = op.confidence.toLowerCase().split(/[^a-z]/)[0];
-        headerLeft.appendChild(el('span', 'confidence-badge confidence-' + confLevel,
-          confLevel.charAt(0).toUpperCase() + confLevel.slice(1)));
-      }
-      if (op.status !== 'ok') {
-        headerLeft.appendChild(el('span', 'card-status-error', op.status.toUpperCase()));
-      }
-      header.appendChild(headerLeft);
-      header.appendChild(el('span', 'card-duration', (op.duration_ms / 1000).toFixed(1) + 's'));
-      card.appendChild(header);
-
-      // Card body
-      const body = el('div', 'card-body');
-      if (op.status === 'ok') {
-        if (op.recommendation) {
-          body.appendChild(el('div', 'card-recommendation', op.recommendation));
-        } else if (!op.structured) {
-          const p = el('p', null);
-          p.style.fontSize = '0.9rem';
-          setText(p, op.response.slice(0, 500) + (op.response.length > 500 ? '...' : ''));
-          body.appendChild(p);
-        }
-
-        // Collapsible sections
-        const sections = [
-          { title: 'Reasoning', data: op.reasoning, type: 'list' },
-          { title: 'Trade-offs', data: op.tradeoffs, type: 'text' },
-          { title: 'Dissent Points', data: op.dissent_points, type: 'text' },
-        ];
-
-        sections.forEach(sec => {
-          if (!sec.data || (Array.isArray(sec.data) && sec.data.length === 0)) return;
-          const section = el('div', 'card-section');
-          const sHeader = el('div', 'card-section-header');
-          const sLeft = el('div');
-          sLeft.style.display = 'flex';
-          sLeft.style.alignItems = 'center';
-          sLeft.style.gap = '0.5rem';
-          sLeft.appendChild(el('span', 'card-section-title', sec.title));
-          if (sec.type === 'list' && Array.isArray(sec.data)) {
-            sLeft.appendChild(el('span', 'card-section-count', sec.data.length.toString()));
-          }
-          sHeader.appendChild(sLeft);
-          const chevron = el('span', 'card-section-chevron', '\\u25b8');
-          sHeader.appendChild(chevron);
-          section.appendChild(sHeader);
-
-          const sBody = el('div', 'card-section-body');
-          if (sec.type === 'list' && Array.isArray(sec.data)) {
-            const ul = document.createElement('ul');
-            sec.data.forEach(item => {
-              const li = document.createElement('li');
-              setText(li, item);
-              ul.appendChild(li);
-            });
-            sBody.appendChild(ul);
-          } else {
-            const p = el('p');
-            setText(p, sec.data);
-            sBody.appendChild(p);
-          }
-          section.appendChild(sBody);
-          body.appendChild(section);
-
-          sHeader.addEventListener('click', () => {
-            sBody.classList.toggle('open');
-            chevron.classList.toggle('open');
-          });
+      function addTab(label, content, isDefault) {
+        const tab = h('div', 'depth-tab' + (isDefault ? ' active' : ''), label);
+        tabBar.appendChild(tab);
+        const panel = h('div', 'depth-panel' + (isDefault ? ' active' : ''));
+        panel.appendChild(content);
+        panels.push({ tab, panel });
+        tab.addEventListener('click', () => {
+          panels.forEach(p => { p.tab.classList.remove('active'); p.panel.classList.remove('active'); });
+          tab.classList.add('active'); panel.classList.add('active');
         });
-      } else {
-        body.appendChild(el('div', 'card-error', op.error || 'Unknown error'));
       }
-      card.appendChild(body);
-      grid.appendChild(card);
+
+      // Tab: Reasoning
+      const rc = h('div');
+      if (op.reasoning && op.reasoning.length) {
+        const sec = h('div', 'depth-section');
+        sec.appendChild(h('div', 'depth-section-label', 'Reasoning'));
+        const ct = h('div', 'depth-section-text');
+        const ul = document.createElement('ul');
+        op.reasoning.forEach(r => { const li = document.createElement('li'); li.textContent = r; ul.appendChild(li); });
+        ct.appendChild(ul); sec.appendChild(ct); rc.appendChild(sec);
+      }
+      if (op.confidence) {
+        const sec = h('div', 'depth-section');
+        sec.appendChild(h('div', 'depth-section-label', 'Confidence'));
+        const p = h('div', 'depth-section-text'); p.textContent = op.confidence;
+        sec.appendChild(p); rc.appendChild(sec);
+      }
+      addTab('Reasoning', rc, true);
+
+      // Tab: Trade-offs
+      const tc = h('div');
+      if (op.tradeoffs) {
+        const sec = h('div', 'depth-section');
+        sec.appendChild(h('div', 'depth-section-label', 'Trade-offs'));
+        const p = h('div', 'depth-section-text'); p.textContent = op.tradeoffs;
+        sec.appendChild(p); tc.appendChild(sec);
+      }
+      if (op.dissent_points) {
+        const sec = h('div', 'depth-section');
+        sec.appendChild(h('div', 'depth-section-label', 'Strongest Counter-argument'));
+        const p = h('div', 'depth-section-text'); p.textContent = op.dissent_points;
+        sec.appendChild(p); tc.appendChild(sec);
+      }
+      addTab('Trade-offs', tc, false);
+
+      // Tab: Full Response
+      const raw = h('div', 'raw-text'); raw.textContent = op.response;
+      addTab('Full Response', raw, false);
+
+      body.appendChild(tabBar);
+      panels.forEach(p => body.appendChild(p.panel));
+      depth.appendChild(body);
+      toggle.addEventListener('click', () => { body.classList.toggle('open'); chevron.classList.toggle('open'); });
+      msg.appendChild(depth);
+    } else {
+      msg.appendChild(h('div', 'agent-error', op.error || 'Unknown error'));
+    }
+    agents.appendChild(msg);
+  });
+
+  // Revisit diff
+  if (DATA.parentSession) {
+    const rs = document.getElementById('revisitSection');
+    rs.appendChild(h('div', 'section-header', 'Revisit Comparison'));
+    const grid = h('div', 'revisit-grid');
+
+    const origCol = h('div', 'revisit-col revisit-original');
+    const origH = h('div', 'revisit-col-header');
+    origH.textContent = 'Original (' + DATA.parentSession.meta.created_at.split('T')[0] + ')';
+    origCol.appendChild(origH);
+    DATA.parentSession.opinions.forEach(op => {
+      if (op.status !== 'ok') return;
+      const item = h('div', 'revisit-item');
+      item.appendChild(h('div', 'revisit-item-label', op.agent));
+      item.appendChild(h('div', 'revisit-item-value', op.recommendation || op.response.slice(0, 200)));
+      origCol.appendChild(item);
     });
-    opinionsPanel.appendChild(grid);
+    grid.appendChild(origCol);
 
-    // --- Reviews panel ---
-    const reviewsPanel = document.getElementById('panel-reviews');
-    if (DATA.reviews.length > 0) {
-      const rGrid = el('div', 'cards-grid');
-      DATA.reviews.forEach(rev => {
-        const agentCls = AGENT_COLORS[rev.agent] || 'codex';
-        const card = el('div', 'agent-card card-accent-' + agentCls);
-        const header = el('div', 'card-header');
-        const headerLeft = el('div', 'card-header-left');
-        headerLeft.appendChild(el('span', 'agent-badge agent-' + agentCls, rev.agent.toUpperCase() + ' review'));
-        header.appendChild(headerLeft);
-        header.appendChild(el('span', 'card-duration', (rev.duration_ms / 1000).toFixed(1) + 's'));
-        card.appendChild(header);
-        const body = el('div', 'card-body');
-        const p = el('p');
-        p.style.fontSize = '0.85rem';
-        p.style.whiteSpace = 'pre-wrap';
-        setText(p, rev.response);
-        body.appendChild(p);
-        card.appendChild(body);
-        rGrid.appendChild(card);
-      });
-      reviewsPanel.appendChild(rGrid);
-    } else {
-      reviewsPanel.appendChild(el('div', 'synthesis-pending', 'No peer reviews. Run with --with-review to enable Stage 2.'));
-    }
+    const curCol = h('div', 'revisit-col revisit-current');
+    const curH = h('div', 'revisit-col-header');
+    curH.textContent = 'Revisit (' + DATA.meta.created_at.split('T')[0] + ')';
+    curCol.appendChild(curH);
+    DATA.opinions.forEach(op => {
+      if (op.status !== 'ok') return;
+      const item = h('div', 'revisit-item');
+      item.appendChild(h('div', 'revisit-item-label', op.agent));
+      item.appendChild(h('div', 'revisit-item-value', op.recommendation || op.response.slice(0, 200)));
+      curCol.appendChild(item);
+    });
+    grid.appendChild(curCol);
+    rs.appendChild(grid);
+  }
 
-    // --- Synthesis panel ---
-    const synthPanel = document.getElementById('panel-synthesis');
-    if (DATA.synthesis) {
-      const panel = el('div', 'synthesis-panel');
-      panel.appendChild(el('div', 'synthesis-label', 'Chairman Synthesis (' + DATA.synthesis.chairman + ')'));
+  // Footer
+  document.getElementById('footerLeft').textContent =
+    DATA.meta.created_at.split('T')[0] + ' \\u00b7 ' + DATA.meta.mode + ' mode \\u00b7 council replay ' + DATA.meta.id;
 
-      const sections = [
-        { title: 'Consensus', content: DATA.synthesis.consensus },
-        { title: 'Divergence', content: DATA.synthesis.divergence },
-        { title: 'Recommendation', content: DATA.synthesis.recommendation },
-        { title: 'Confidence', content: DATA.synthesis.confidence },
-      ];
-
-      sections.forEach(sec => {
-        if (!sec.content) return;
-        const s = el('div', 'synthesis-section');
-        s.appendChild(el('div', 'synthesis-section-title', sec.title));
-        const c = el('div', 'synthesis-section-content');
-        setText(c, sec.content);
-        s.appendChild(c);
-        panel.appendChild(s);
-      });
-      synthPanel.appendChild(panel);
-    } else {
-      synthPanel.appendChild(el('div', 'synthesis-pending', 'Synthesis pending. The chairman will produce this after reviewing all opinions.'));
-    }
-
-    // --- Revisit diff panel ---
-    const revisitPanel = document.getElementById('panel-revisit');
-    if (DATA.parentSession && revisitPanel) {
-      const grid = el('div', 'revisit-grid');
-
-      // Original column
-      const origCol = el('div', 'revisit-col revisit-original');
-      const origHeader = el('div', 'revisit-col-header');
-      setText(origHeader, 'Original (' + DATA.parentSession.meta.created_at.split('T')[0] + ')');
-      origCol.appendChild(origHeader);
-
-      DATA.parentSession.opinions.forEach(op => {
-        if (op.status !== 'ok') return;
-        const item = el('div', 'revisit-item');
-        const label = el('div', 'revisit-item-label');
-        setText(label, op.agent + (op.confidence ? ' (' + op.confidence.split('\\n')[0] + ')' : ''));
-        item.appendChild(label);
-        const val = el('div', 'revisit-item-value');
-        setText(val, op.recommendation || op.response.slice(0, 200));
-        item.appendChild(val);
-        origCol.appendChild(item);
-      });
-
-      if (DATA.parentSession.synthesis) {
-        const item = el('div', 'revisit-item');
-        const label = el('div', 'revisit-item-label');
-        label.style.color = 'var(--blue)';
-        setText(label, 'Chairman Synthesis');
-        item.appendChild(label);
-        const val = el('div', 'revisit-item-value');
-        setText(val, DATA.parentSession.synthesis.recommendation || '');
-        item.appendChild(val);
-        origCol.appendChild(item);
-      }
-      grid.appendChild(origCol);
-
-      // Current column
-      const curCol = el('div', 'revisit-col revisit-current');
-      const curHeader = el('div', 'revisit-col-header');
-      setText(curHeader, 'Revisit (' + DATA.meta.created_at.split('T')[0] + ')');
-      curCol.appendChild(curHeader);
-
-      DATA.opinions.forEach(op => {
-        if (op.status !== 'ok') return;
-        const item = el('div', 'revisit-item');
-        const label = el('div', 'revisit-item-label');
-        setText(label, op.agent + (op.confidence ? ' (' + op.confidence.split('\\n')[0] + ')' : ''));
-        item.appendChild(label);
-        const val = el('div', 'revisit-item-value');
-        setText(val, op.recommendation || op.response.slice(0, 200));
-        item.appendChild(val);
-        curCol.appendChild(item);
-      });
-
-      if (DATA.synthesis) {
-        const item = el('div', 'revisit-item');
-        const label = el('div', 'revisit-item-label');
-        label.style.color = 'var(--blue)';
-        setText(label, 'Chairman Synthesis');
-        item.appendChild(label);
-        const val = el('div', 'revisit-item-value');
-        setText(val, DATA.synthesis.recommendation || '');
-        item.appendChild(val);
-        curCol.appendChild(item);
-      }
-      grid.appendChild(curCol);
-      revisitPanel.appendChild(grid);
-    }
-
-    // --- Outcome banner ---
-    if (DATA.meta.outcome) {
-      const banner = el('div', 'outcome-banner');
-      const dot = el('div', 'outcome-dot');
-      banner.appendChild(dot);
-      const text = el('div', 'outcome-text');
-      setText(text, DATA.meta.outcome.result);
-      banner.appendChild(text);
-      const date = el('div', 'outcome-date');
-      setText(date, DATA.meta.outcome.recorded_at.split('T')[0]);
-      banner.appendChild(date);
-      // Insert after summary bar
-      const summaryBar = document.querySelector('.summary-bar');
-      if (summaryBar && summaryBar.parentNode) {
-        summaryBar.parentNode.insertBefore(banner, summaryBar.nextSibling);
-      }
-    }
-
-    // --- Footer ---
-    setText(document.getElementById('footerLeft'),
-      DATA.meta.created_at.split('T')[0] + ' \\u00b7 council replay ' + DATA.meta.id);
-  </script>
+  // Theme toggle
+  const themeBtn = document.getElementById('themeToggle');
+  function applyTheme(dark) {
+    document.documentElement.classList.toggle('dark', dark);
+    themeBtn.textContent = dark ? '\\u263e' : '\\u2600';
+    themeBtn.title = dark ? 'Switch to light mode' : 'Switch to dark mode';
+    try { localStorage.setItem('council-theme', dark ? 'dark' : 'light'); } catch {}
+  }
+  const saved = (() => { try { return localStorage.getItem('council-theme'); } catch { return null; } })();
+  if (saved === 'dark') applyTheme(true);
+  else if (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches) applyTheme(true);
+  themeBtn.addEventListener('click', () => applyTheme(!document.documentElement.classList.contains('dark')));
+</script>
 </body>
 </html>`;
 
