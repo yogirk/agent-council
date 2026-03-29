@@ -1,0 +1,72 @@
+[
+  {
+    "id": "db-choice",
+    "category": "architecture",
+    "question": "Should we use PostgreSQL or DynamoDB for an event sourcing system? Requirements: 10k events/sec write throughput, strong consistency for account balances, team has SQL experience.",
+    "context_files": [],
+    "expected_considerations": ["consistency", "scaling", "team experience", "cost", "operational complexity"]
+  },
+  {
+    "id": "job-queue",
+    "category": "technology-selection",
+    "question": "We need a job queue for background processing in our Node.js app. Requirements: at-least-once delivery, delayed jobs, priority queues, Redis-backed. Compare BullMQ, Agenda, and bee-queue.",
+    "context_files": [],
+    "expected_considerations": ["reliability", "performance", "maintenance status", "API ergonomics", "monitoring"]
+  },
+  {
+    "id": "auth-pattern",
+    "category": "architecture",
+    "question": "For a new SaaS API, should we use JWT tokens or server-side sessions for authentication? We expect 500 concurrent users, need to support mobile and web clients, and want to add SSO later.",
+    "context_files": [],
+    "expected_considerations": ["stateless vs stateful", "token revocation", "SSO compatibility", "mobile support", "security"]
+  },
+  {
+    "id": "monorepo",
+    "category": "architecture",
+    "question": "Should we move from separate repos to a monorepo? We have 4 services (API, web frontend, mobile BFF, shared libs) with 6 engineers. Currently spending ~20% of time on cross-repo dependency management.",
+    "context_files": [],
+    "expected_considerations": ["build tooling", "CI complexity", "code sharing", "team workflow", "migration effort"]
+  },
+  {
+    "id": "real-time",
+    "category": "technology-selection",
+    "question": "For real-time notifications in our web app, should we use WebSockets, Server-Sent Events (SSE), or long polling? We need to push ~100 notifications/sec across 5000 concurrent connections.",
+    "context_files": [],
+    "expected_considerations": ["scalability", "browser support", "infrastructure", "bidirectional needs", "reconnection"]
+  },
+  {
+    "id": "testing-strategy",
+    "category": "process",
+    "question": "Our test suite takes 45 minutes to run. It has 2000 tests: 60% unit, 30% integration, 10% E2E. The E2E tests are flaky (15% failure rate) and account for 70% of the runtime. What should we do?",
+    "context_files": [],
+    "expected_considerations": ["parallelization", "flaky test quarantine", "test pyramid", "CI optimization", "selective running"]
+  },
+  {
+    "id": "caching-layer",
+    "category": "architecture",
+    "question": "Our API has p99 latency of 800ms, mostly from database queries. Should we add Redis caching, use a CDN for API responses, implement application-level memoization, or optimize the queries first?",
+    "context_files": [],
+    "expected_considerations": ["cache invalidation", "data freshness", "complexity", "cost", "root cause analysis"]
+  },
+  {
+    "id": "error-handling",
+    "category": "code-design",
+    "question": "In our TypeScript backend, should we use exceptions (try/catch), Result types (like neverthrow), or error codes for error handling? We have 50+ API endpoints and 3 developers.",
+    "context_files": [],
+    "expected_considerations": ["type safety", "developer experience", "debugging", "consistency", "migration effort"]
+  },
+  {
+    "id": "deployment",
+    "category": "infrastructure",
+    "question": "We're moving from Heroku to self-managed infrastructure. Should we use Kubernetes, Docker Compose on a VPS, or a PaaS like Fly.io/Railway? We have 3 services, 2 developers, and $500/month budget.",
+    "context_files": [],
+    "expected_considerations": ["operational overhead", "cost", "scaling", "team expertise", "vendor lock-in"]
+  },
+  {
+    "id": "state-management",
+    "category": "code-design",
+    "question": "For a complex React dashboard with 20+ interactive widgets, shared filters, and real-time updates, should we use Redux Toolkit, Zustand, Jotai, or React Context + useReducer?",
+    "context_files": [],
+    "expected_considerations": ["bundle size", "boilerplate", "devtools", "learning curve", "performance at scale"]
+  }
+]

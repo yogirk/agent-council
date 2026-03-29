@@ -1,0 +1,20 @@
+{
+  "name": "agent-council",
+  "version": "0.1.0",
+  "description": "Convene a panel of CLI-based AI agents to deliberate on engineering problems",
+  "type": "module",
+  "main": "src/council.ts",
+  "bin": {
+    "council": "bin/council"
+  },
+  "scripts": {
+    "start": "bun run src/council.ts",
+    "test": "bun test",
+    "build": "bun build --compile src/council.ts --outfile bin/council-bin"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yogirk/agent-council.git"
+  }
+}

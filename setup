@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo "Agent Council — Setup"
+echo "====================="
+echo ""
+
+# Check Bun
+if ! command -v bun &>/dev/null; then
+  echo "Error: Bun is required. Install: curl -fsSL https://bun.sh/install | bash"
+  exit 1
+fi
+echo "✓ Bun $(bun --version)"
+
+# Check available CLI agents
+AGENTS_FOUND=0
+for agent in claude codex gemini; do
+  if command -v "$agent" &>/dev/null; then
+    echo "✓ $agent found"
+    AGENTS_FOUND=$((AGENTS_FOUND + 1))
+  else
+    echo "  $agent not found (optional)"
+  fi
+done
+
+if [ "$AGENTS_FOUND" -lt 2 ]; then
+  echo ""
+  echo "Warning: Agent Council needs at least 2 CLI agents."
+  echo "Install any two of: claude (Claude Code), codex (OpenAI), gemini (Gemini CLI)"
+fi
+
+echo ""
+
+# Install Claude Code skill
+if command -v claude &>/dev/null; then
+  SKILL_DIR="$HOME/.claude/skills/agent-council"
+  mkdir -p "$SKILL_DIR"
+  cp "$SCRIPT_DIR/skills/claude-code/SKILL.md" "$SKILL_DIR/SKILL.md"
+  # Create a symlink to bin/council so the skill can find it
+  ln -sf "$SCRIPT_DIR/bin/council" "$SKILL_DIR/council"
+  echo "✓ Claude Code skill installed to $SKILL_DIR"
+fi
+
+# Install Codex placeholder
+if command -v codex &>/dev/null; then
+  CODEX_DIR="$HOME/.agents/skills"
+  mkdir -p "$CODEX_DIR"
+  cat > "$CODEX_DIR/agent-council.md" << 'EOF'
+# Agent Council (Codex)
+Phase 2: Codex as chairman support coming.
+For now, use Agent Council from Claude Code with `/council`.
+EOF
+  echo "✓ Codex placeholder installed to $CODEX_DIR"
+fi
+
+# Install Gemini placeholder
+if command -v gemini &>/dev/null; then
+  GEMINI_DIR="$HOME/.gemini/skills"
+  mkdir -p "$GEMINI_DIR"
+  cat > "$GEMINI_DIR/agent-council.md" << 'EOF'
+# Agent Council (Gemini)
+Phase 2: Gemini as chairman support coming.
+For now, use Agent Council from Claude Code with `/council`.
+EOF
+  echo "✓ Gemini placeholder installed to $GEMINI_DIR"
+fi
+
+# Create council home directory
+mkdir -p "$HOME/.council"
+echo "✓ Storage directory: ~/.council/"
+
+echo ""
+echo "Setup complete! Run: /council \"your question\" from Claude Code"
