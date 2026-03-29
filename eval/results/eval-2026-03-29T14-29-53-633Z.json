@@ -1,0 +1,31 @@
+[
+  {
+    "id": "error-handling",
+    "category": "code-design",
+    "single_agent": {
+      "duration_ms": 21023,
+      "considerations_found": 0,
+      "considerations_missing": [
+        "type safety",
+        "developer experience",
+        "debugging",
+        "consistency",
+        "migration effort"
+      ],
+      "response_length": 2108
+    },
+    "council": {
+      "duration_ms": 27463,
+      "session_dir": "/Users/rk/.council/eval-benchmark/council-20260329-142926",
+      "considerations_found": 1,
+      "considerations_missing": [
+        "type safety",
+        "developer experience",
+        "debugging",
+        "migration effort"
+      ],
+      "response_length": 8119
+    },
+    "considerations_total": 5
+  }
+]

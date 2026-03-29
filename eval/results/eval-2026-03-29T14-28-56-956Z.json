@@ -1,0 +1,28 @@
+[
+  {
+    "id": "db-choice",
+    "category": "architecture",
+    "single_agent": {
+      "duration_ms": 26763,
+      "considerations_found": 1,
+      "considerations_missing": [
+        "scaling",
+        "team experience",
+        "cost",
+        "operational complexity"
+      ],
+      "response_length": 2036
+    },
+    "council": {
+      "duration_ms": 29784,
+      "session_dir": "/Users/rk/.council/eval-benchmark/council-20260329-142827",
+      "considerations_found": 3,
+      "considerations_missing": [
+        "team experience",
+        "operational complexity"
+      ],
+      "response_length": 9238
+    },
+    "considerations_total": 5
+  }
+]

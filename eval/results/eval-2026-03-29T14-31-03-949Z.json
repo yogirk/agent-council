@@ -1,0 +1,25 @@
+[
+  {
+    "id": "deployment",
+    "category": "infrastructure",
+    "single_agent": {
+      "duration_ms": 27018,
+      "considerations_found": 3,
+      "considerations_missing": [
+        "team expertise",
+        "vendor lock-in"
+      ],
+      "response_length": 1862
+    },
+    "council": {
+      "duration_ms": 37418,
+      "session_dir": "/Users/rk/.council/eval-benchmark/council-20260329-143026",
+      "considerations_found": 4,
+      "considerations_missing": [
+        "team expertise"
+      ],
+      "response_length": 7884
+    },
+    "considerations_total": 5
+  }
+]
