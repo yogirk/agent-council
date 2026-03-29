@@ -1,6 +1,6 @@
 {
   "name": "cliagent-council",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Convene a panel of CLI-based AI agents to deliberate on engineering problems",
   "type": "module",
   "main": "src/council.ts",
