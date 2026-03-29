@@ -86,6 +86,13 @@ After writing synthesis.json, regenerate the viewer so it includes your verdict:
 $COUNCIL_BIN regenerate-viewer "$(basename "$SESSION_DIR")" --project "$SLUG"
 ```
 
-## Step 6: Offer the viewer
+## Step 6: Offer the viewer and next steps
 
-Tell the user: "Council viewer saved to: $SESSION_DIR/viewer.html — open in browser to explore the full deliberation."
+Tell the user:
+
+> Council viewer saved to: $SESSION_DIR/viewer.html — open in browser to explore the full deliberation.
+>
+> **Next steps:**
+> - Re-evaluate later with current context: `/council-revisit {SESSION_ID}`
+> - Record how this decision played out: `/council-outcome {SESSION_ID} "what happened"`
+> - Browse past sessions: `/council-list`

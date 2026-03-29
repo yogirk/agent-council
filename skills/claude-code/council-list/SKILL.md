@@ -20,5 +20,9 @@ $COUNCIL_BIN list --project "$SLUG"
 ```
 
 After showing the list, tell the user:
-- To replay a session: `/council-replay <session-id>`
-- To open the viewer: `open ~/.council/{project}/{session-id}/viewer.html`
+
+> **Next steps:**
+> - Replay in terminal: `/council-replay <session-id>`
+> - Re-run with current context: `/council-revisit <session-id>`
+> - Record outcome: `/council-outcome <session-id> "what happened"`
+> - Open viewer: `open ~/.council/{project}/{session-id}/viewer.html`
