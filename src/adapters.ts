@@ -4,6 +4,11 @@ import { resolve } from "path";
 
 export type AgentId = "claude" | "codex" | "gemini";
 
+export interface SessionOutcome {
+  result: string;
+  recorded_at: string;
+}
+
 export interface SessionMeta {
   id: string;
   question: string;
@@ -15,6 +20,7 @@ export interface SessionMeta {
   context_files: string[];
   parent_id: string | null;
   revisits: string[];
+  outcome?: SessionOutcome;
 }
 
 export interface AgentResult {

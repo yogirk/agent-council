@@ -1,4 +1,4 @@
-import { resolve } from "path";
+import { resolve, dirname } from "path";
 import { existsSync, readFileSync, readdirSync } from "fs";
 import type { AgentResult, SessionMeta } from "./adapters";
 
@@ -51,6 +51,54 @@ function loadReviews(sessionDir: string): AgentResult[] {
   }
 }
 
+// --- Parent session loading (for revisits) ---
+
+interface ParentSessionData {
+  meta: SessionMeta;
+  opinions: Array<{
+    agent: string;
+    status: string;
+    recommendation?: string;
+    confidence?: string;
+    response: string;
+  }>;
+  synthesis: SynthesisData | null;
+}
+
+function loadParentSession(sessionDir: string, parentId: string): ParentSessionData | null {
+  // Parent dir is a sibling of the current session dir
+  const projectDir = dirname(sessionDir);
+  const parentDir = resolve(projectDir, parentId);
+  if (!existsSync(parentDir)) return null;
+
+  try {
+    const metaPath = resolve(parentDir, "meta.json");
+    if (!existsSync(metaPath)) return null;
+    const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+
+    const stage1Dir = resolve(parentDir, "stage1");
+    const opinions = existsSync(stage1Dir)
+      ? readdirSync(stage1Dir)
+          .filter((f) => f.startsWith("opinion_") && f.endsWith(".json"))
+          .map((f) => {
+            const op = JSON.parse(readFileSync(resolve(stage1Dir, f), "utf-8"));
+            return {
+              agent: op.agent,
+              status: op.status,
+              recommendation: op.recommendation,
+              confidence: op.confidence,
+              response: op.response,
+            };
+          })
+      : [];
+
+    const synthesis = loadSynthesis(parentDir);
+    return { meta, opinions, synthesis };
+  } catch {
+    return null;
+  }
+}
+
 // --- Generator ---
 
 export function generateViewer(
@@ -62,6 +110,11 @@ export function generateViewer(
   const reviews = loadReviews(sessionDir);
   const totalDuration = opinions.reduce((sum, o) => Math.max(sum, o.duration_ms), 0);
   const successCount = opinions.filter((o) => o.status === "ok").length;
+
+  // Load parent session if this is a revisit
+  const parentSession = meta.parent_id
+    ? loadParentSession(sessionDir, meta.parent_id)
+    : null;
 
   const viewerData = {
     meta,
@@ -85,6 +138,7 @@ export function generateViewer(
       response: r.response,
       duration_ms: r.duration_ms,
     })),
+    parentSession,
     totalDuration,
     successCount,
   };
@@ -332,6 +386,49 @@ export function generateViewer(
       text-align: center;
     }
 
+    /* --- Revisit diff --- */
+    .revisit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 768px) {
+      .revisit-grid { grid-template-columns: 1fr; }
+    }
+    .revisit-col {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .revisit-col-header {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.75rem;
+    }
+    .revisit-original .revisit-col-header { color: var(--text-muted); }
+    .revisit-current .revisit-col-header { color: var(--green); }
+    .revisit-item { margin-bottom: 0.75rem; }
+    .revisit-item-label { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; }
+    .revisit-item-value { font-size: 0.9rem; color: var(--text); margin-top: 0.2rem; }
+
+    /* --- Outcome badge --- */
+    .outcome-banner {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .outcome-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--amber); }
+    .outcome-text { font-size: 0.85rem; color: var(--text); }
+    .outcome-date { font-size: 0.7rem; color: var(--text-dim); margin-left: auto; }
+
     /* --- Footer --- */
     .footer {
       margin-top: 2.5rem;
@@ -409,13 +506,15 @@ export function generateViewer(
       { id: 'opinions', label: 'Opinions', dot: 'green', enabled: true },
       { id: 'reviews', label: 'Reviews', dot: 'amber', enabled: DATA.reviews.length > 0 },
       { id: 'synthesis', label: 'Synthesis', dot: 'blue', enabled: true },
+      { id: 'revisit', label: 'Revisit Diff', dot: 'purple', enabled: !!DATA.parentSession },
     ];
 
     tabDefs.forEach((td, i) => {
       const tab = el('div', 'tab' + (i === 0 ? ' active' : '') + (!td.enabled ? ' disabled' : ''));
       tab.dataset.tab = td.id;
       const dot = el('span', 'tab-dot');
-      dot.style.background = td.enabled ? 'var(--' + (td.dot === 'green' ? 'green' : td.dot === 'amber' ? 'amber' : 'blue') + ')' : 'var(--text-dim)';
+      const dotColorMap = { green: 'green', amber: 'amber', blue: 'blue', purple: 'purple' };
+      dot.style.background = td.enabled ? 'var(--' + (dotColorMap[td.dot] || 'blue') + ')' : 'var(--text-dim)';
       tab.appendChild(dot);
       tab.appendChild(document.createTextNode(td.label));
       if (td.enabled) {
@@ -576,6 +675,93 @@ export function generateViewer(
       synthPanel.appendChild(panel);
     } else {
       synthPanel.appendChild(el('div', 'synthesis-pending', 'Synthesis pending. The chairman will produce this after reviewing all opinions.'));
+    }
+
+    // --- Revisit diff panel ---
+    const revisitPanel = document.getElementById('panel-revisit');
+    if (DATA.parentSession && revisitPanel) {
+      const grid = el('div', 'revisit-grid');
+
+      // Original column
+      const origCol = el('div', 'revisit-col revisit-original');
+      const origHeader = el('div', 'revisit-col-header');
+      setText(origHeader, 'Original (' + DATA.parentSession.meta.created_at.split('T')[0] + ')');
+      origCol.appendChild(origHeader);
+
+      DATA.parentSession.opinions.forEach(op => {
+        if (op.status !== 'ok') return;
+        const item = el('div', 'revisit-item');
+        const label = el('div', 'revisit-item-label');
+        setText(label, op.agent + (op.confidence ? ' (' + op.confidence.split('\\n')[0] + ')' : ''));
+        item.appendChild(label);
+        const val = el('div', 'revisit-item-value');
+        setText(val, op.recommendation || op.response.slice(0, 200));
+        item.appendChild(val);
+        origCol.appendChild(item);
+      });
+
+      if (DATA.parentSession.synthesis) {
+        const item = el('div', 'revisit-item');
+        const label = el('div', 'revisit-item-label');
+        label.style.color = 'var(--blue)';
+        setText(label, 'Chairman Synthesis');
+        item.appendChild(label);
+        const val = el('div', 'revisit-item-value');
+        setText(val, DATA.parentSession.synthesis.recommendation || '');
+        item.appendChild(val);
+        origCol.appendChild(item);
+      }
+      grid.appendChild(origCol);
+
+      // Current column
+      const curCol = el('div', 'revisit-col revisit-current');
+      const curHeader = el('div', 'revisit-col-header');
+      setText(curHeader, 'Revisit (' + DATA.meta.created_at.split('T')[0] + ')');
+      curCol.appendChild(curHeader);
+
+      DATA.opinions.forEach(op => {
+        if (op.status !== 'ok') return;
+        const item = el('div', 'revisit-item');
+        const label = el('div', 'revisit-item-label');
+        setText(label, op.agent + (op.confidence ? ' (' + op.confidence.split('\\n')[0] + ')' : ''));
+        item.appendChild(label);
+        const val = el('div', 'revisit-item-value');
+        setText(val, op.recommendation || op.response.slice(0, 200));
+        item.appendChild(val);
+        curCol.appendChild(item);
+      });
+
+      if (DATA.synthesis) {
+        const item = el('div', 'revisit-item');
+        const label = el('div', 'revisit-item-label');
+        label.style.color = 'var(--blue)';
+        setText(label, 'Chairman Synthesis');
+        item.appendChild(label);
+        const val = el('div', 'revisit-item-value');
+        setText(val, DATA.synthesis.recommendation || '');
+        item.appendChild(val);
+        curCol.appendChild(item);
+      }
+      grid.appendChild(curCol);
+      revisitPanel.appendChild(grid);
+    }
+
+    // --- Outcome banner ---
+    if (DATA.meta.outcome) {
+      const banner = el('div', 'outcome-banner');
+      const dot = el('div', 'outcome-dot');
+      banner.appendChild(dot);
+      const text = el('div', 'outcome-text');
+      setText(text, DATA.meta.outcome.result);
+      banner.appendChild(text);
+      const date = el('div', 'outcome-date');
+      setText(date, DATA.meta.outcome.recorded_at.split('T')[0]);
+      banner.appendChild(date);
+      // Insert after summary bar
+      const summaryBar = document.querySelector('.summary-bar');
+      if (summaryBar && summaryBar.parentNode) {
+        summaryBar.parentNode.insertBefore(banner, summaryBar.nextSibling);
+      }
     }
 
     // --- Footer ---

@@ -188,6 +188,11 @@ async function dispatchWithQuorum(
         if (result.status === "ok") {
           successCount++;
           console.error(`  ${adapter.id} responded (${(result.duration_ms / 1000).toFixed(1)}s)`);
+          // Progressive output: show recommendation snippet
+          if (result.recommendation) {
+            const snippet = result.recommendation.slice(0, 120).replace(/\n/g, " ");
+            console.error(`    \u2192 ${snippet}${result.recommendation.length > 120 ? "..." : ""}`);
+          }
         } else {
           console.error(`  ${adapter.id} ${result.status}: ${result.error}`);
         }
@@ -260,8 +265,8 @@ function createSessionDir(project: string): { sessionId: string; sessionDir: str
   const now = new Date();
   const ts = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
   const sessionId = `council-${ts}`;
-  const councilHome = resolve(councilHome(), project);
-  const sessionDir = resolve(councilHome, sessionId);
+  const projectDir = resolve(councilHome(), project);
+  const sessionDir = resolve(projectDir, sessionId);
 
   mkdirSync(resolve(sessionDir, "stage1"), { recursive: true });
   return { sessionId, sessionDir };
@@ -278,13 +283,13 @@ async function writeJson(dir: string, filename: string, data: any): Promise<void
 // --- CLI: list and replay ---
 
 function listSessions(project: string): void {
-  const councilHome = resolve(councilHome(), project);
-  if (!existsSync(councilHome)) {
+  const projectDir = resolve(councilHome(), project);
+  if (!existsSync(projectDir)) {
     console.log("No council sessions found.");
     return;
   }
 
-  const sessions = readdirSync(councilHome)
+  const sessions = readdirSync(projectDir)
     .filter((d) => d.startsWith("council-"))
     .sort()
     .reverse();
@@ -296,7 +301,7 @@ function listSessions(project: string): void {
 
   console.log(`\nCouncil sessions for "${project}":\n`);
   for (const session of sessions) {
-    const metaPath = resolve(councilHome, session, "meta.json");
+    const metaPath = resolve(projectDir, session, "meta.json");
     if (!existsSync(metaPath)) continue;
     try {
       const meta: SessionMeta = JSON.parse(readFileSync(metaPath, "utf-8"));
@@ -375,16 +380,157 @@ function replaySession(project: string, sessionId: string): void {
   console.log(`\n${"=".repeat(70)}\n`);
 }
 
+// --- Revisit (Living Decisions) ---
+
+async function revisitSession(
+  project: string,
+  parentSessionId: string,
+  chairman: AgentId,
+  contextOverride: string[],
+  config: CouncilConfig
+): Promise<void> {
+  const parentDir = resolve(councilHome(), project, parentSessionId);
+  if (!existsSync(parentDir)) {
+    console.error(`Session not found: ${parentSessionId}`);
+    console.error(`Looking in: ${parentDir}`);
+    process.exit(1);
+  }
+
+  const parentMetaPath = resolve(parentDir, "meta.json");
+  if (!existsSync(parentMetaPath)) {
+    console.error(`No meta.json in session: ${parentSessionId}`);
+    process.exit(1);
+  }
+
+  const parentMeta: SessionMeta = JSON.parse(readFileSync(parentMetaPath, "utf-8"));
+
+  console.error(`\nRevisiting council decision: ${parentSessionId}`);
+  console.error(`Original question: ${parentMeta.question.slice(0, 80)}...`);
+  console.error(`Original date: ${parentMeta.created_at}`);
+
+  // Use context override if provided, otherwise re-read original context files
+  const contextFiles = contextOverride.length > 0 ? contextOverride : parentMeta.context_files;
+  const repoRoot = detectRepoRoot();
+  const context = buildContextBundle(contextFiles, repoRoot);
+
+  // Detect available agents
+  const available = await detectAgents();
+  if (available.length < 2) {
+    console.error("Error: Agent Council requires at least 2 CLI agents.");
+    process.exit(1);
+  }
+
+  // Create new session linked to parent
+  const { sessionId, sessionDir } = createSessionDir(project);
+  console.error(`New session: ${sessionId}`);
+  console.error(`Storage: ${sessionDir}`);
+
+  // Run Stage 1 with original question + current context
+  const opinions = await runStage1(
+    available,
+    parentMeta.question,
+    context,
+    repoRoot,
+    config.timeout_ms,
+    config.quorum_grace_ms
+  );
+
+  // Write opinion files
+  for (const opinion of opinions) {
+    await writeJson(
+      resolve(sessionDir, "stage1"),
+      `opinion_${opinion.agent}.json`,
+      opinion
+    );
+  }
+
+  const successfulOpinions = opinions.filter((o) => o.status === "ok");
+  console.error(
+    `Stage 1 complete: ${successfulOpinions.length}/${opinions.length} successful opinions`
+  );
+
+  if (successfulOpinions.length === 0) {
+    console.error("Error: All agents failed. Council cannot reconvene.");
+    process.exit(1);
+  }
+
+  // Write meta with parent linkage
+  const meta: SessionMeta = {
+    id: sessionId,
+    question: parentMeta.question,
+    project,
+    chairman,
+    members: available.map((a) => a.id),
+    mode: parentMeta.mode,
+    created_at: new Date().toISOString(),
+    context_files: contextFiles,
+    parent_id: parentSessionId,
+    revisits: [],
+  };
+  await writeJson(sessionDir, "meta.json", meta);
+
+  // Update parent's revisits array
+  parentMeta.revisits = parentMeta.revisits || [];
+  parentMeta.revisits.push(sessionId);
+  await writeJson(parentDir, "meta.json", parentMeta);
+
+  // Generate viewer (will pick up parent data for side-by-side)
+  generateViewer(sessionDir, meta, opinions);
+
+  // Output session dir
+  console.log(sessionDir);
+
+  console.error(`\nRevisit complete. Parent: ${parentSessionId} → Child: ${sessionId}`);
+  console.error(`Open viewer to compare: ${resolve(sessionDir, "viewer.html")}`);
+}
+
+// --- Outcome Annotations ---
+
+async function recordOutcome(
+  project: string,
+  sessionId: string,
+  result: string
+): Promise<void> {
+  const sessionDir = resolve(councilHome(), project, sessionId);
+  if (!existsSync(sessionDir)) {
+    console.error(`Session not found: ${sessionId}`);
+    process.exit(1);
+  }
+
+  const metaPath = resolve(sessionDir, "meta.json");
+  const meta: SessionMeta = JSON.parse(readFileSync(metaPath, "utf-8"));
+
+  meta.outcome = {
+    result,
+    recorded_at: new Date().toISOString(),
+  };
+
+  await writeJson(sessionDir, "meta.json", meta);
+
+  // Regenerate viewer with outcome data
+  const stage1Dir = resolve(sessionDir, "stage1");
+  if (existsSync(stage1Dir)) {
+    const opinions = readdirSync(stage1Dir)
+      .filter((f) => f.startsWith("opinion_") && f.endsWith(".json"))
+      .map((f) => JSON.parse(readFileSync(resolve(stage1Dir, f), "utf-8")));
+    generateViewer(sessionDir, meta, opinions);
+  }
+
+  console.log(`Outcome recorded for ${sessionId}: "${result}"`);
+  console.log(`Viewer updated: ${resolve(sessionDir, "viewer.html")}`);
+}
+
 // --- CLI Arg Parsing ---
 
 function parseArgs(): {
-  command: "run" | "list" | "replay";
+  command: "run" | "list" | "replay" | "revisit" | "outcome";
   chairman: AgentId;
   questionFile?: string;
   project: string;
   mode: "fast" | "thorough" | "quick";
   contextFiles: string[];
   sessionId?: string;
+  outcomeResult?: string;
 } {
   const args = process.argv.slice(2);
 
@@ -409,13 +555,52 @@ function parseArgs(): {
       sessionId,
     };
   }
-  // "view" is handled by opening the viewer.html file directly in a browser.
-  // No subcommand needed — the path is printed after each council run.
+  if (args[0] === "revisit") {
+    const sessionId = args[1];
+    if (!sessionId) {
+      console.error("Usage: council revisit <session-id> [--project <slug>] [--context file1,file2]");
+      process.exit(1);
+    }
+    const project = getFlag(args, "--project") || detectProjectSlug();
+    const contextArg = getFlag(args, "--context");
+    const contextFiles = contextArg ? contextArg.split(",") : [];
+    const chairman = validateChairman(getFlag(args, "--chairman") || "claude");
+    return {
+      command: "revisit",
+      chairman,
+      project: validateProjectSlug(project),
+      mode: "fast",
+      contextFiles,
+      sessionId,
+    };
+  }
+  if (args[0] === "outcome") {
+    const sessionId = args[1];
+    if (!sessionId) {
+      console.error("Usage: council outcome <session-id> --result \"description\"");
+      process.exit(1);
+    }
+    const result = getFlag(args, "--result");
+    if (!result) {
+      console.error("Usage: council outcome <session-id> --result \"description\"");
+      process.exit(1);
+    }
+    const project = getFlag(args, "--project") || detectProjectSlug();
+    return {
+      command: "outcome",
+      chairman: "claude",
+      project: validateProjectSlug(project),
+      mode: "fast",
+      contextFiles: [],
+      sessionId,
+      outcomeResult: result,
+    };
+  }
 
   // Default: run a council session
   const questionFile = getFlag(args, "--question-file");
-  const chairman = (getFlag(args, "--chairman") || "claude") as AgentId;
-  const project = getFlag(args, "--project") || detectProjectSlug();
+  const chairman = validateChairman(getFlag(args, "--chairman") || "claude");
+  const project = validateProjectSlug(getFlag(args, "--project") || detectProjectSlug());
   const withReview = args.includes("--with-review");
   const quick = args.includes("--quick");
   const contextArg = getFlag(args, "--context");
@@ -446,9 +631,54 @@ function detectProjectSlug(): string {
   return basename(process.cwd());
 }
 
+// --- Path validation ---
+
+const SENSITIVE_EXTENSIONS = [".key", ".pem", ".env", ".secret", ".token", ".p12", ".pfx"];
+const VALID_AGENT_IDS = ["claude", "codex", "gemini"];
+
+function isPathSafe(file: string, repoRoot: string): { safe: boolean; reason?: string } {
+  if (file.startsWith("/")) {
+    return { safe: false, reason: "absolute paths not allowed" };
+  }
+  if (file.includes("..")) {
+    return { safe: false, reason: "directory traversal not allowed" };
+  }
+  if (SENSITIVE_EXTENSIONS.some((ext) => file.toLowerCase().endsWith(ext))) {
+    return { safe: false, reason: "sensitive file type" };
+  }
+  const fullPath = resolve(repoRoot, file);
+  try {
+    const { realpathSync } = require("fs");
+    const realPath = realpathSync(fullPath);
+    const realRoot = realpathSync(repoRoot);
+    if (!realPath.startsWith(realRoot + "/") && realPath !== realRoot) {
+      return { safe: false, reason: "path outside repository" };
+    }
+  } catch {
+    // File doesn't exist yet, but path pattern is safe
+  }
+  return { safe: true };
+}
+
+function validateProjectSlug(project: string): string {
+  if (project.includes("..") || project.includes("/") || project.includes("\\")) {
+    console.error(`Error: Invalid project name "${project}". Must not contain .., /, or \\.`);
+    process.exit(1);
+  }
+  return project;
+}
+
+function validateChairman(chairman: string): AgentId {
+  if (!VALID_AGENT_IDS.includes(chairman)) {
+    console.error(`Error: Invalid chairman "${chairman}". Must be one of: ${VALID_AGENT_IDS.join(", ")}`);
+    process.exit(1);
+  }
+  return chairman as AgentId;
+}
+
 // --- Context bundling ---
 
-function buildContextBundle(files: string[], repoRoot: string): string {
+export function buildContextBundle(files: string[], repoRoot: string): string {
   if (files.length === 0) return "";
 
   const MAX_BYTES = 50 * 1024; // 50KB cap
@@ -456,6 +686,12 @@ function buildContextBundle(files: string[], repoRoot: string): string {
   const sections: string[] = [];
 
   for (const file of files) {
+    const check = isPathSafe(file, repoRoot);
+    if (!check.safe) {
+      sections.push(`### ${file}\n(rejected: ${check.reason})`);
+      continue;
+    }
+
     const fullPath = resolve(repoRoot, file);
     if (!existsSync(fullPath)) {
       sections.push(`### ${file}\n(file not found)`);
@@ -483,6 +719,7 @@ function buildContextBundle(files: string[], repoRoot: string): string {
 
 async function main(): Promise<void> {
   const parsed = parseArgs();
+  const config = loadConfig();
 
   // Handle subcommands
   if (parsed.command === "list") {
@@ -493,9 +730,22 @@ async function main(): Promise<void> {
     replaySession(parsed.project, parsed.sessionId!);
     return;
   }
+  if (parsed.command === "revisit") {
+    await revisitSession(
+      parsed.project,
+      parsed.sessionId!,
+      parsed.chairman,
+      parsed.contextFiles,
+      config
+    );
+    return;
+  }
+  if (parsed.command === "outcome") {
+    await recordOutcome(parsed.project, parsed.sessionId!, parsed.outcomeResult!);
+    return;
+  }
 
   // Run a council session
-  const config = loadConfig();
   const repoRoot = detectRepoRoot();
   const question = readFileSync(parsed.questionFile!, "utf-8").trim();
 
@@ -633,7 +883,13 @@ function detectRepoRoot(): string {
   return process.cwd();
 }
 
-main().catch((e) => {
-  console.error(`Fatal error: ${e.message}`);
-  process.exit(1);
-});
+// Run main() unless this file was imported by a test runner
+// Bun.main is the entry point; when tests import us, Bun.main is the test file
+const _entryFile = Bun.main;
+const _isTestImport = _entryFile.includes("bun-test") || _entryFile.includes("/tests/") || _entryFile.endsWith(".test.ts");
+if (!_isTestImport) {
+  main().catch((e) => {
+    console.error(`Fatal error: ${e.message}`);
+    process.exit(1);
+  });
+}
