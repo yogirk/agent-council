@@ -296,8 +296,8 @@ export function generateViewer(
   const confLevel = DATA.synthesis ? DATA.synthesis.confidence : (DATA.successCount > 0 ? 'pending' : 'none');
   [
     { val: DATA.successCount + '/' + DATA.opinions.length, label: 'Agents', cls: '' },
-    { val: DATA.successCount === DATA.opinions.length ? '100%' : Math.round(DATA.successCount / DATA.opinions.length * 100) + '%', label: 'Consensus', cls: 'green' },
-    { val: confLevel.charAt(0).toUpperCase() + confLevel.slice(1), label: 'Confidence', cls: confLevel === 'high' ? 'green' : confLevel === 'low' ? 'amber' : '' },
+    { val: DATA.successCount + '/' + DATA.opinions.length, label: 'Responded', cls: DATA.successCount === DATA.opinions.length ? 'green' : 'amber' },
+    { val: confLevel.charAt(0).toUpperCase() + confLevel.slice(1), label: 'Consensus', cls: confLevel === 'high' ? 'green' : confLevel === 'low' ? 'amber' : '' },
     { val: (DATA.totalDuration / 1000).toFixed(0) + 's', label: 'Wall Clock', cls: 'amber' }
   ].forEach(k => {
     const d = h('div', 'kpi');
