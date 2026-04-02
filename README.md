@@ -1,8 +1,8 @@
 # Agent Council
 
-Convene a panel of CLI-based AI agents to deliberate on your questions. Three models answer independently, review each other's work, and the invoking agent synthesizes the verdict as chairman.
+Convene a panel of CLI-based AI agents to deliberate on your questions. Multiple models answer independently, review each other's work, and the invoking agent synthesizes the verdict as chairman.
 
-Works with **Claude Code**, **Codex CLI**, and **Gemini CLI**. Whichever tool you invoke from becomes the chairman. The others are council members.
+Works with **Claude Code**, **Codex CLI**, **Gemini CLI**, and **GitHub Copilot CLI**. Whichever tool you invoke from becomes the chairman. The others are council members.
 
 Inspired by [Karpathy's LLM Council](https://github.com/karpathy/llm-council), adapted for the CLI agent ecosystem.
 
@@ -72,12 +72,13 @@ cd agent-council
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (`claude`) — skills install to `~/.claude/skills/`
 - [OpenAI Codex](https://github.com/openai/codex) (`codex`) — skills install to `~/.agents/skills/`
 - [Gemini CLI](https://github.com/google-gemini/gemini-cli) (`gemini`) — skills install to `~/.gemini/skills/`
+- [GitHub Copilot CLI](https://docs.github.com/copilot/how-tos/copilot-cli) (`copilot`) — discovers skills from `~/.copilot/skills/`, `~/.claude/skills/`, and `~/.agents/skills/`
 
 ## Usage
 
-### As a skill (Claude Code, Codex CLI, Gemini CLI)
+### As a skill (Claude Code, Codex CLI, Gemini CLI, Copilot CLI)
 
-The same slash commands work in all three CLIs. The invoking agent automatically becomes the chairman.
+The same slash commands work in all four CLIs. The invoking agent automatically becomes the chairman.
 
 ```
 /council "Should we use WebSockets or SSE for real-time updates?"
@@ -90,7 +91,7 @@ The same slash commands work in all three CLIs. The invoking agent automatically
 /council-outcome council-20260329-143000 "It worked great"  # Record outcome
 ```
 
-When invoked from Claude Code, Claude is chairman. From Codex, Codex is chairman. From Gemini, Gemini is chairman. The chairman gives its own independent opinion in Stage 1, then synthesizes all opinions in Stage 3.
+When invoked from Claude Code, Claude is chairman. From Codex, Codex is chairman. From Gemini, Gemini is chairman. From Copilot, Copilot is chairman. The chairman gives its own independent opinion in Stage 1, then synthesizes all opinions in Stage 3.
 
 ### From the command line
 ```bash
@@ -117,17 +118,17 @@ bin/council replay council-20260329-143000 --project myapp
                              |
               Stage 1: Independent Opinions
                              |
-            +----------------+----------------+
-            |                |                |
-      +-----------+    +-----------+    +-----------+
-      | Claude    |    | Codex     |    | Gemini    |
-      | Code      |    | CLI       |    | CLI       |
-      +-----------+    +-----------+    +-----------+
-            |                |                |
-            v                v                v
-      [Opinion A]      [Opinion B]      [Opinion C]
-            |                |                |
-            +----------------+----------------+
+       +----------------+----+----+----------------+
+       |                |         |                |
+  +-----------+  +-----------+  +-----------+  +-----------+
+  | Claude    |  | Codex     |  | Gemini    |  | Copilot   |
+  | Code      |  | CLI       |  | CLI       |  | CLI       |
+  +-----------+  +-----------+  +-----------+  +-----------+
+       |                |         |                |
+       v                v         v                v
+  [Opinion A]    [Opinion B] [Opinion C]    [Opinion D]
+       |                |         |                |
+       +----------------+---------+----------------+
                              |
                Stage 2: Anonymized Peer Review
                         (optional: --with-review)
@@ -156,12 +157,14 @@ Create `~/.council/config.json` to customize models, timeouts, and quorum behavi
   "models": {
     "claude": "claude-opus-4-6",
     "codex": "gpt-5.4",
-    "gemini": "gemini-3.1-pro"
+    "gemini": "gemini-3.1-pro",
+    "copilot": "gpt-5.2"
   },
   "timeout_ms": {
     "claude": 120000,
     "codex": 120000,
-    "gemini": 180000
+    "gemini": 180000,
+    "copilot": 120000
   },
   "quorum_grace_ms": 30000
 }
@@ -188,7 +191,7 @@ Every council session generates a self-contained HTML viewer. Open it in your br
 - **Verdict-first layout** with KPI strip (agents, consensus, confidence, wall clock)
 - **Progressive depth**: recommendation always visible, then Reasoning / Trade-offs / Full Response as tabbed layers
 - **Light and dark mode** with toggle (respects system preference)
-- **Agent identity** via colored geometric icons (⬢ Claude, ⬣ Codex, ◆ Gemini)
+- **Agent identity** via colored geometric icons (⬢ Claude, ⬣ Codex, ◆ Gemini, ⬡ Copilot)
 - **Outcome banners** when a decision outcome has been recorded
 - **Revisit comparison** side-by-side when viewing a revisited session
 - **DM Sans typography**, responsive layout, XSS-safe rendering

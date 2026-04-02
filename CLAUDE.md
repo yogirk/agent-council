@@ -1,11 +1,11 @@
 # Agent Council
 
-Multi-agent deliberation tool. Convenes Claude Code, Codex CLI, and Gemini CLI to deliberate on questions.
+Multi-agent deliberation tool. Convenes Claude Code, Codex CLI, Gemini CLI, and GitHub Copilot CLI to deliberate on questions.
 
 ## Architecture
 
 - `src/council.ts` — CLI entry point, orchestration, subprocess dispatch, quorum logic, all subcommands
-- `src/adapters.ts` — Agent adapters (Claude, Codex, Gemini) + shared types (SessionMeta, AgentResult)
+- `src/adapters.ts` — Agent adapters (Claude, Codex, Gemini, Copilot) + shared types (SessionMeta, AgentResult)
 - `src/prompts.ts` — Stage 1, 2, 3 prompt templates
 - `src/viewer.ts` — Self-contained HTML viewer generation (verdict-first, progressive depth, light/dark mode)
 - `bin/council` — Bun entry script
@@ -16,7 +16,7 @@ Multi-agent deliberation tool. Convenes Claude Code, Codex CLI, and Gemini CLI t
 
 Run: `bun test`
 Framework: Bun built-in test runner
-Fixtures: `tests/fixtures/` — real CLI output from Claude, Codex, Gemini
+Fixtures: `tests/fixtures/` — real CLI output from Claude, Codex, Gemini, Copilot
 
 ## Key patterns
 
@@ -35,7 +35,7 @@ Config: `~/.council/config.json`
 
 ## Config defaults
 
-- Claude: 120s timeout, Codex: 120s, Gemini: 180s
+- Claude: 120s timeout, Codex: 120s, Gemini: 180s, Copilot: 120s
 - Quorum grace: 30s
-- Models: claude-opus-4-6, gpt-5.4, gemini-3.1-pro
+- Models: claude-opus-4-6, gpt-5.4, gemini-3.1-pro, copilot: gpt-5.2
 - Proactive nudges: true
