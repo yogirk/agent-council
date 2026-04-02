@@ -139,7 +139,7 @@ export function generateViewer(
     --text: #1d1d1f; --text-secondary: #6e6e73; --text-tertiary: #aeaeb2; --text-dim: #c7c7cc;
     --green: #28a745; --green-light: #dcfce7;
     --amber: #b45309; --amber-light: #fef3c7;
-    --purple: #7c3aed; --blue: #2563eb; --teal: #0d9488;
+    --purple: #7c3aed; --blue: #2563eb; --teal: #0d9488; --orange: #ea580c;
     --raw-bg: #f7f7f8;
   }
   html.dark {
@@ -148,6 +148,7 @@ export function generateViewer(
     --text: #e4e4e7; --text-secondary: #a1a1a6; --text-tertiary: #63636a; --text-dim: #45454a;
     --green: #4ade80; --green-light: rgba(74,222,128,0.1);
     --amber: #fbbf24; --amber-light: rgba(251,191,36,0.1);
+    --orange: #fb923c;
     --raw-bg: #151518;
   }
 
@@ -196,6 +197,7 @@ export function generateViewer(
   .agent-avatar.claude { color: var(--purple); }
   .agent-avatar.codex { color: var(--teal); }
   .agent-avatar.gemini { color: var(--blue); }
+  .agent-avatar.copilot { color: var(--orange); }
   .agent-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
   .agent-meta { font-size: 0.62rem; color: var(--text-tertiary); }
   .agent-conf-tag { font-size: 0.55rem; font-weight: 600; padding: 1px 7px; border-radius: 4px; background: var(--green-light); color: var(--green); }
@@ -279,7 +281,7 @@ export function generateViewer(
 
 <script>
   const DATA = ${escapeJsonForScript(viewerData)};
-  const ICONS = { claude: '\\u2b22', codex: '\\u2b23', gemini: '\\u25c6' };
+  const ICONS = { claude: '\\u2b22', codex: '\\u2b23', gemini: '\\u25c6', copilot: '\\u2b21' };
 
   function h(tag, cls, text) {
     const e = document.createElement(tag);
