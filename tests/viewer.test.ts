@@ -145,6 +145,16 @@ describe("generateViewer", () => {
     expect(html).toContain("@media (max-width: 768px)");
   });
 
+  test("renders copilot agent with correct icon and class", () => {
+    const meta = mockMeta({ members: ["codex", "gemini", "copilot"] });
+    generateViewer(tmpDir, meta, [mockOpinion("codex"), mockOpinion("gemini"), mockOpinion("copilot")]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
+
+    expect(html).toContain("copilot");
+    expect(html).toContain("\\u2b21");
+    expect(html).toContain("--orange");
+  });
+
   test("shows outcome banner when outcome exists", () => {
     const meta = mockMeta({ outcome: { result: "It worked great", recorded_at: "2026-04-15T10:00:00Z" } });
     generateViewer(tmpDir, meta, [mockOpinion("codex")]);

@@ -1,0 +1,7 @@
+{"type":"session.mcp_servers_loaded","data":{"servers":[{"name":"github-mcp-server","status":"connected","source":"builtin"}]},"id":"67d9aa67","timestamp":"2026-04-02T08:53:47.771Z","parentId":"596c4999","ephemeral":true}
+{"type":"session.tools_updated","data":{"model":"claude-sonnet-4.5"},"id":"33f46d17","timestamp":"2026-04-02T08:53:50.627Z","parentId":"596c4999","ephemeral":true}
+{"type":"user.message","data":{"content":"Hello","attachments":[],"interactionId":"68e4a45a"},"id":"9499fdee","timestamp":"2026-04-02T08:53:50.628Z","parentId":"596c4999"}
+{"type":"assistant.turn_start","data":{"turnId":"0","interactionId":"68e4a45a"},"id":"31b28fc8","timestamp":"2026-04-02T08:53:50.630Z","parentId":"9499fdee"}
+{"type":"assistant.message","data":{"messageId":"28bcaa16","content":"Hello","toolRequests":[],"interactionId":"68e4a45a","outputTokens":83},"id":"85e447bb","timestamp":"2026-04-02T08:53:56.447Z","parentId":"31b28fc8"}
+{"type":"assistant.turn_end","data":{"turnId":"0"},"id":"462204c7","timestamp":"2026-04-02T08:53:56.448Z","parentId":"85e447bb"}
+{"type":"result","timestamp":"2026-04-02T08:53:56.449Z","sessionId":"80961498","exitCode":0,"usage":{"premiumRequests":1,"totalApiDurationMs":5283,"sessionDurationMs":13232,"codeChanges":{"linesAdded":0,"linesRemoved":0,"filesModified":[]}}}

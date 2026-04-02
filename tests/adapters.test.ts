@@ -5,6 +5,7 @@ import {
   claudeAdapter,
   codexAdapter,
   geminiAdapter,
+  copilotAdapter,
   detectAgents,
 } from "../src/adapters";
 
@@ -126,6 +127,73 @@ describe("geminiAdapter", () => {
   });
 });
 
+// --- Copilot Adapter ---
+
+describe("copilotAdapter", () => {
+  test("parseOutput: valid JSONL extracts assistant.message content", () => {
+    const stdout = readFileSync(resolve(fixturesDir, "copilot-output.jsonl"), "utf-8");
+    const result = copilotAdapter.parseOutput(stdout, "", 0, 4000);
+
+    expect(result.status).toBe("ok");
+    expect(result.agent).toBe("copilot");
+    expect(result.response).toContain("Hello");
+    expect(result.duration_ms).toBe(4000);
+    expect(result.model).toBe("claude-sonnet-4.5");
+  });
+
+  test("parseOutput: malformed JSONL skips bad lines", () => {
+    const stdout = '{"type":"session.tools_updated","data":{"model":"gpt-5.2"}}\n{broken}\n{"type":"assistant.message","data":{"content":"Result"}}\n';
+    const result = copilotAdapter.parseOutput(stdout, "", 0, 100);
+
+    expect(result.status).toBe("ok");
+    expect(result.response).toBe("Result");
+    expect(result.model).toBe("gpt-5.2");
+  });
+
+  test("parseOutput: empty stdout returns error", () => {
+    const result = copilotAdapter.parseOutput("", "", 0, 100);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("No assistant.message events");
+  });
+
+  test("parseOutput: JSONL with no assistant.message returns error", () => {
+    const stdout = '{"type":"session.mcp_servers_loaded","data":{}}\n{"type":"result","exitCode":0}\n';
+    const result = copilotAdapter.parseOutput(stdout, "", 0, 100);
+
+    expect(result.status).toBe("error");
+  });
+
+  test("parseOutput: non-zero exit code with no stdout returns error", () => {
+    const result = copilotAdapter.parseOutput("", "auth failed", 1, 100);
+
+    expect(result.status).toBe("error");
+    expect(result.error).toContain("Exit code 1");
+    expect(result.raw_stderr).toBe("auth failed");
+  });
+
+  test("parseOutput: concatenates multiple assistant.message events", () => {
+    const stdout = [
+      '{"type":"assistant.message","data":{"content":"First part. "}}',
+      '{"type":"assistant.message","data":{"content":"Second part."}}',
+    ].join("\n");
+    const result = copilotAdapter.parseOutput(stdout, "", 0, 100);
+
+    expect(result.status).toBe("ok");
+    expect(result.response).toBe("First part. Second part.");
+  });
+
+  test("command returns correct CLI args", () => {
+    const cmd = copilotAdapter.command("test question", "/repo");
+    expect(cmd).toEqual([
+      "copilot", "-p", "test question",
+      "--output-format", "json", "-s",
+      "--allow-all-tools", "--no-ask-user",
+      "--no-custom-instructions",
+    ]);
+  });
+});
+
 // --- Structured Section Parsing ---
 
 describe("structured section parsing", () => {
@@ -180,7 +248,7 @@ DynamoDB would scale more easily if write volume triples.`;
 describe("detectAgents", () => {
   test("returns at least some agents on this machine", async () => {
     const agents = await detectAgents();
-    // We know all 3 are installed on this machine from preflight
+    // We know all 4 are installed on this machine from preflight
     expect(agents.length).toBeGreaterThanOrEqual(2);
   });
 });
