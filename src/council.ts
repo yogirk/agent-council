@@ -26,6 +26,7 @@ const DEFAULT_TIMEOUTS: Record<string, number> = {
   claude: 120_000,
   codex: 120_000,
   gemini: 180_000,
+  copilot: 120_000,
 };
 
 const DEFAULT_CONFIG: CouncilConfig = {
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: CouncilConfig = {
     claude: "claude-opus-4-6",
     codex: "gpt-5.4",
     gemini: "gemini-3.1-pro",
+    copilot: "gpt-5.2",
   },
   timeout_ms: { ...DEFAULT_TIMEOUTS },
   quorum_grace_ms: 30_000,
@@ -63,7 +65,7 @@ function loadConfig(): CouncilConfig {
     let timeouts = { ...DEFAULT_TIMEOUTS };
     if (parsed.timeout_ms) {
       if (typeof parsed.timeout_ms === "number") {
-        timeouts = { claude: parsed.timeout_ms, codex: parsed.timeout_ms, gemini: parsed.timeout_ms };
+        timeouts = { claude: parsed.timeout_ms, codex: parsed.timeout_ms, gemini: parsed.timeout_ms, copilot: parsed.timeout_ms };
       } else if (typeof parsed.timeout_ms === "object") {
         timeouts = { ...DEFAULT_TIMEOUTS, ...parsed.timeout_ms };
       }
@@ -659,7 +661,7 @@ function detectProjectSlug(): string {
 // --- Path validation ---
 
 const SENSITIVE_EXTENSIONS = [".key", ".pem", ".env", ".secret", ".token", ".p12", ".pfx"];
-const VALID_AGENT_IDS = ["claude", "codex", "gemini"];
+const VALID_AGENT_IDS = ["claude", "codex", "gemini", "copilot"];
 
 function detectChairman(): AgentId {
   // Detect which CLI is invoking us by walking the process tree
@@ -673,6 +675,7 @@ function detectChairman(): AgentId {
       if (cmd === "codex") return "codex";
       if (cmd === "gemini") return "gemini";
       if (cmd === "claude") return "claude";
+      if (cmd === "copilot") return "copilot";
       pid = parseInt(parts[0], 10);
       if (isNaN(pid)) break;
     }
@@ -819,7 +822,7 @@ async function main(): Promise<void> {
     console.error(
       `Error: Agent Council requires at least 2 CLI agents. Found: ${availableIds.join(", ") || "none"}.`
     );
-    console.error("Install: claude (Claude Code), codex (OpenAI Codex), gemini (Gemini CLI)");
+    console.error("Install: claude (Claude Code), codex (OpenAI Codex), gemini (Gemini CLI), copilot (GitHub Copilot)");
     process.exit(1);
   }
 
