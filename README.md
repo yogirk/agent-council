@@ -44,7 +44,7 @@ HIGH — Strong consensus across models.
 
 1. **Grounded deliberation.** Council members are CLI agents with tool access. They can `grep` your codebase, read migration files, run `git log`. Opinions are grounded in your actual project, not abstract text generation.
 
-2. **Zero marginal cost.** You're tapping into subscriptions you already have (Claude Code, Codex, Gemini CLI). No new API tokens to buy.
+2. **Zero marginal cost.** You're tapping into subscriptions you already have (Claude Code, Codex, Gemini CLI, Copilot CLI). No new API tokens to buy.
 
 3. **Living decisions.** Every deliberation is a hypothesis that can be re-evaluated. "We chose Postgres 3 months ago... re-run with what we know now." Use `/council-revisit` to compare then vs now.
 

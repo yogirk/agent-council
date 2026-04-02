@@ -33,7 +33,7 @@ fi
 echo ""
 
 # Install skills to all detected CLI agent platforms
-# SKILL.md is a cross-platform standard: Claude Code, Codex CLI, and Gemini CLI all support it
+# SKILL.md is a cross-platform standard: Claude Code, Codex CLI, Gemini CLI, and Copilot CLI all support it
 SKILLS_SRC="$SCRIPT_DIR/skills/claude-code"
 INSTALLED_TO=""
 
