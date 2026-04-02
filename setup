@@ -15,7 +15,7 @@ echo "✓ Bun $(bun --version)"
 
 # Check available CLI agents
 AGENTS_FOUND=0
-for agent in claude codex gemini; do
+for agent in claude codex gemini copilot; do
   if command -v "$agent" &>/dev/null; then
     echo "✓ $agent found"
     AGENTS_FOUND=$((AGENTS_FOUND + 1))
@@ -27,7 +27,7 @@ done
 if [ "$AGENTS_FOUND" -lt 2 ]; then
   echo ""
   echo "Warning: Agent Council needs at least 2 CLI agents."
-  echo "Install any two of: claude (Claude Code), codex (OpenAI), gemini (Gemini CLI)"
+  echo "Install any two of: claude (Claude Code), codex (OpenAI), gemini (Gemini CLI), copilot (GitHub Copilot)"
 fi
 
 echo ""
@@ -74,6 +74,11 @@ fi
 # Gemini CLI: ~/.gemini/skills/
 if command -v gemini &>/dev/null; then
   install_skills "$HOME/.gemini/skills" "Gemini"
+fi
+
+# Copilot CLI: ~/.copilot/skills/
+if command -v copilot &>/dev/null; then
+  install_skills "$HOME/.copilot/skills" "Copilot"
 fi
 
 if [ -n "$INSTALLED_TO" ]; then
