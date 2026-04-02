@@ -1,7 +1,7 @@
 ---
 name: council
 description: |
-  Convene a panel of CLI-based AI agents (Codex, Gemini) to deliberate on a
+  Convene a panel of CLI-based AI agents (Codex, Gemini, Copilot) to deliberate on a
   question. Each agent answers independently, then you synthesize the council's
   verdict as chairman. Use for architecture decisions, code review, debugging
   hypotheses, or any question where diverse perspectives add value.
@@ -14,8 +14,8 @@ allowed-tools:
 # Agent Council
 
 Convene a multi-agent council to deliberate on a question. You (Claude) are the
-chairman. Other CLI agents (Codex, Gemini) provide independent opinions. You
-synthesize the final verdict.
+chairman. Other CLI agents (Codex, Gemini, Copilot) provide independent opinions.
+You synthesize the final verdict.
 
 ## Usage
 
@@ -26,7 +26,7 @@ The user invokes `/council "their question"` or `/council --with-review "their q
 Run this bash block. Replace `{QUESTION}` with the user's actual question text.
 
 ```bash
-COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
+COUNCIL_BIN=""; for _d in "$HOME/.claude/skills/agent-council" "$HOME/.agents/skills/agent-council" "$HOME/.gemini/skills/agent-council" "$HOME/.copilot/skills/agent-council" "$(git rev-parse --show-toplevel 2>/dev/null)"; do [ -x "$_d/bin/council" ] && COUNCIL_BIN="$_d/bin/council" && break; [ -x "$_d/council" ] && COUNCIL_BIN="$_d/council" && break; done; [ -z "$COUNCIL_BIN" ] && COUNCIL_BIN="$(which council 2>/dev/null || echo "bin/council")"
 QUESTION_FILE=$(mktemp /tmp/council-q-XXXXXX)
 cat <<'COUNCIL_EOF' > "$QUESTION_FILE"
 {QUESTION}
