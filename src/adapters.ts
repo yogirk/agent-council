@@ -2,7 +2,7 @@ import { resolve } from "path";
 
 // --- Types ---
 
-export type AgentId = "claude" | "codex" | "gemini";
+export type AgentId = "claude" | "codex" | "gemini" | "copilot";
 
 export interface SessionOutcome {
   result: string;
@@ -292,12 +292,82 @@ export const geminiAdapter: AgentAdapter = {
   },
 };
 
+// --- Copilot Adapter ---
+// Output: JSONL streaming. Look for assistant.message events with data.content.
+
+export const copilotAdapter: AgentAdapter = {
+  id: "copilot",
+  binary: "copilot",
+
+  detect: () => binaryExists("copilot"),
+
+  command(prompt: string): string[] {
+    return [
+      "copilot", "-p", prompt,
+      "--output-format", "json", "-s",
+      "--allow-all-tools", "--no-ask-user",
+      "--no-custom-instructions",
+    ];
+  },
+
+  parseOutput(stdout, stderr, exitCode, durationMs) {
+    if (exitCode !== 0 && !stdout.trim()) {
+      return makeError("copilot", `Exit code ${exitCode}`, stderr, durationMs);
+    }
+    try {
+      const lines = stdout.trim().split("\n").filter(Boolean);
+      let responseText = "";
+      let model: string | undefined;
+
+      for (const line of lines) {
+        try {
+          const event = JSON.parse(line);
+          if (event.type === "assistant.message" && event.data?.content) {
+            responseText += event.data.content;
+          }
+          if (event.type === "session.tools_updated" && event.data?.model) {
+            model = event.data.model;
+          }
+        } catch {
+          // Skip unparseable lines
+        }
+      }
+
+      if (!responseText) {
+        return makeError(
+          "copilot",
+          "No assistant.message events with content found in JSONL",
+          stderr,
+          durationMs
+        );
+      }
+
+      const result = makeResult("copilot", responseText, durationMs);
+      result.model = model;
+      return result;
+    } catch (e: any) {
+      return {
+        agent: "copilot",
+        status: "error",
+        structured: false,
+        response: stdout,
+        raw_response: stdout,
+        error: `JSONL parse failed: ${e.message}`,
+        raw_stderr: stderr,
+        duration_ms: durationMs,
+        timestamp: new Date().toISOString(),
+      };
+    }
+  },
+};
+
 // --- Agent Registry ---
 
 export const allAdapters: AgentAdapter[] = [
   claudeAdapter,
   codexAdapter,
   geminiAdapter,
+  copilotAdapter,
 ];
 
 export async function detectAgents(): Promise<AgentAdapter[]> {
