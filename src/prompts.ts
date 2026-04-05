@@ -15,11 +15,17 @@ Your clear recommendation (1-2 sentences).
 ### Reasoning
 Why this is the right approach (3-5 bullets).
 
+### Assumptions
+What facts did you assume about this project, team, or constraints that, if wrong, would change your recommendation? List 2-4 assumptions.
+
 ### Trade-offs
 What you're giving up with this choice.
 
 ### Confidence
 High / Medium / Low — and what would change your mind.
+
+### What Would Change My Mind
+Name the single most important fact that, if true, would make you switch to a different recommendation entirely.
 
 ### Dissent Points
 If a reasonable engineer disagreed, what would their strongest argument be?`;
@@ -59,6 +65,46 @@ Notes: ...
 ### Final Ranking
 1. Response X — reason
 2. Response Y — reason`;
+}
+
+export function stage4NudgePrompt(
+  question: string,
+  originalResponse: string,
+  correction: string
+): string {
+  return `You previously answered this engineering question:
+
+## Original Question
+${question}
+
+## Your Previous Response
+${originalResponse}
+
+## Correction from the human
+The human is telling you that one of your assumptions was wrong:
+${correction}
+
+Given this correction, reconsider your recommendation. Be explicit about
+what changed and what stayed the same. Structure your response as:
+
+### What Changed
+How does this correction affect your recommendation?
+
+### Updated Recommendation
+Your revised recommendation (or state "Unchanged" if the correction
+doesn't affect your conclusion).
+
+### Assumptions
+Your revised assumptions list.
+
+### Reasoning
+Updated reasoning (3-5 bullets).
+
+### Trade-offs
+Updated trade-offs.
+
+### Updated Confidence
+Has your confidence changed? Why?`;
 }
 
 export function stage3Prompt(

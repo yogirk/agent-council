@@ -12,3 +12,8 @@ tsconfig.json
 *.test.ts
 install.js
 .claude/
+src/
+bin/
+setup
+VERSION
+question.txt

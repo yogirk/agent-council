@@ -173,6 +173,103 @@ DynamoDB would scale more easily if write volume triples.`;
     expect(result.structured).toBe(false);
     expect(result.response).toBe("Just use Postgres, it's fine.");
   });
+
+  test("parses assumptions as bullet list", () => {
+    const response = `### Recommendation
+Use Postgres.
+
+### Reasoning
+- Good fit
+
+### Assumptions
+- Team will not exceed 10TB
+- No need for global distribution
+- Budget allows managed hosting
+
+### What Would Change My Mind
+If write volume exceeds 50k/sec sustained, DynamoDB becomes necessary.`;
+
+    const result = claudeAdapter.parseOutput(
+      JSON.stringify({ result: response, modelUsage: {} }),
+      "",
+      0,
+      1000
+    );
+
+    expect(result.structured).toBe(true);
+    expect(result.assumptions).toHaveLength(3);
+    expect(result.assumptions![0]).toContain("10TB");
+    expect(result.assumptions![2]).toContain("managed hosting");
+    expect(result.belief_update_trigger).toContain("50k/sec");
+  });
+
+  test("parses assumptions as prose (fallback to single element)", () => {
+    const response = `### Recommendation
+Use Postgres.
+
+### Reasoning
+- Good fit
+
+### Assumptions
+The team has existing SQL expertise and the data model is relational.`;
+
+    const result = claudeAdapter.parseOutput(
+      JSON.stringify({ result: response, modelUsage: {} }),
+      "",
+      0,
+      1000
+    );
+
+    expect(result.assumptions).toHaveLength(1);
+    expect(result.assumptions![0]).toContain("SQL expertise");
+  });
+
+  test("fuzzy matches variant headings", () => {
+    const response = `### Recommendation
+Use Postgres.
+
+### Reasoning
+- Good fit
+
+### Key Assumptions
+- Team knows SQL
+- Data is relational
+
+### Trade-Offs
+No auto-scaling.
+
+### Strongest Counter-argument
+MongoDB is more flexible.`;
+
+    const result = claudeAdapter.parseOutput(
+      JSON.stringify({ result: response, modelUsage: {} }),
+      "",
+      0,
+      1000
+    );
+
+    expect(result.assumptions).toHaveLength(2);
+    expect(result.tradeoffs).toContain("auto-scaling");
+    expect(result.dissent_points).toContain("MongoDB");
+  });
+
+  test("missing assumptions returns undefined", () => {
+    const response = `### Recommendation
+Use Postgres.
+
+### Reasoning
+- Good fit`;
+
+    const result = claudeAdapter.parseOutput(
+      JSON.stringify({ result: response, modelUsage: {} }),
+      "",
+      0,
+      1000
+    );
+
+    expect(result.assumptions).toBeUndefined();
+    expect(result.belief_update_trigger).toBeUndefined();
+  });
 });
 
 // --- Agent Detection ---
