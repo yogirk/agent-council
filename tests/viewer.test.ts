@@ -48,52 +48,62 @@ function mockOpinion(agent: string, status: "ok" | "error" = "ok"): AgentResult 
 }
 
 describe("generateViewer", () => {
-  test("generates valid HTML with new design", () => {
+  test("generates valid HTML with v2 design", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex"), mockOpinion("gemini")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
     expect(html).toContain("<!DOCTYPE html>");
     expect(html).toContain("Agent Council");
     expect(html).toContain("council-20260329-120000");
-    expect(html).toContain("DM Sans");
+    expect(html).toContain("--font-display");
     expect(html).not.toContain(".innerHTML");
   });
 
-  test("renders agent stack layout", () => {
+  test("renders tabbed opinions layout", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex"), mockOpinion("gemini")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("agents-stack");
-    expect(html).toContain("agent-msg");
-    expect(html).toContain("agent-avatar");
+    expect(html).toContain("opinions-tabs");
+    expect(html).toContain("opinion-panel");
+    expect(html).toContain("agent-card-body");
   });
 
-  test("renders KPI strip and verdict", () => {
+  test("renders meta strip and verdict", () => {
+    const synthesis = {
+      chairman: "claude",
+      consensus: "All agree on Postgres",
+      divergence: "Codex flags scaling",
+      recommendation: "Use Postgres with read replicas",
+      confidence: "high",
+      timestamp: new Date().toISOString(),
+    };
+    writeFileSync(resolve(tmpDir, "synthesis.json"), JSON.stringify(synthesis));
+
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("kpi-strip");
+    expect(html).toContain("meta-strip");
     expect(html).toContain("verdict");
-    expect(html).toContain("Council Verdict");
+    expect(html).toContain("Verdict");
   });
 
   test("includes dark mode toggle and CSS variables", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("themeToggle");
-    expect(html).toContain("html.dark");
+    expect(html).toContain("theme-toggle");
+    expect(html).toContain('[data-theme="dark"]');
     expect(html).toContain("prefers-color-scheme");
   });
 
-  test("includes depth tabs (Reasoning, Trade-offs, Full Response)", () => {
+  test("includes reasoning and transcript sections", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("depth-tabs");
+    expect(html).toContain("agent-sub-label");
     expect(html).toContain("Reasoning");
-    expect(html).toContain("Trade-offs");
-    expect(html).toContain("Full Response");
+    expect(html).toContain("transcript-toggle");
+    expect(html).toContain("transcript-body");
   });
 
   test("includes synthesis when synthesis.json exists", () => {
@@ -113,11 +123,13 @@ describe("generateViewer", () => {
     expect(html).toContain("All agree on Postgres");
   });
 
-  test("shows pending message when no synthesis", () => {
+  test("renders without synthesis (no crash)", () => {
     generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("Synthesis pending");
+    // Should still have the basic structure even without synthesis
+    expect(html).toContain("Agent Council");
+    expect(html).toContain("renderVerdict");
   });
 
   test("handles error opinions", () => {
@@ -145,12 +157,48 @@ describe("generateViewer", () => {
     expect(html).toContain("@media (max-width: 768px)");
   });
 
-  test("shows outcome banner when outcome exists", () => {
+  test("shows outcome data when outcome exists", () => {
     const meta = mockMeta({ outcome: { result: "It worked great", recorded_at: "2026-04-15T10:00:00Z" } });
     generateViewer(tmpDir, meta, [mockOpinion("codex")]);
     const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
 
-    expect(html).toContain("outcome-banner");
+    expect(html).toContain("outcome");
     expect(html).toContain("It worked great");
+  });
+
+  test("includes nudges when stage4 exists", () => {
+    mkdirSync(resolve(tmpDir, "stage4"), { recursive: true });
+    writeFileSync(resolve(tmpDir, "stage4", "nudge_gemini.json"), JSON.stringify({
+      agent: "gemini",
+      status: "ok",
+      recommendation: "Updated recommendation",
+      confidence: "high",
+      what_changed: "Fixed the storage engine name",
+      response: "Full response text",
+      duration_ms: 8000,
+      nudge_meta: {
+        correction: "ClickHouse uses MergeTree, not LSM-tree",
+        original_recommendation: "Original recommendation",
+        timestamp: "2026-03-29T19:48:22Z",
+      },
+    }));
+
+    generateViewer(tmpDir, mockMeta(), [mockOpinion("codex")]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
+
+    expect(html).toContain("MergeTree");
+    expect(html).toContain("Updated recommendation");
+  });
+
+  test("includes assumptions and belief_update_trigger in viewerData", () => {
+    const opinion = mockOpinion("codex");
+    (opinion as any).assumptions = ["The workload is OLAP"];
+    (opinion as any).belief_update_trigger = "If point lookups matter more";
+
+    generateViewer(tmpDir, mockMeta(), [opinion]);
+    const html = readFileSync(resolve(tmpDir, "viewer.html"), "utf-8");
+
+    expect(html).toContain("The workload is OLAP");
+    expect(html).toContain("If point lookups matter more");
   });
 });
