@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.3.0] - 2026-04-06 — Epistemic Debugger
+
+Reliability, error intelligence, and the ability to challenge agent assumptions mid-session.
+
+### Added
+
+- **Preflight health checks.** Before a session starts, each agent gets a version check and no-op prompt to verify auth and connectivity. Reports ready/degraded/down with actionable messages ("codex authentication expired. Run `codex login` to fix."). Bypass with `--skip-preflight`.
+- **Error classification.** Failed agents now get a typed `error_class` (auth, rate_limit, timeout, parse, startup, unknown) with human-readable messages explaining what went wrong and how to fix it.
+- **Retry wrapper.** Transient failures (timeout, rate_limit, unknown) get one automatic retry with a 3s backoff. Non-transient failures (auth, parse, startup) fail immediately.
+- **Nudge subcommand** (`council nudge <session> --agent <agent> --correction "text"`). Challenge a specific agent's assumptions after a session. The agent reconsiders with your correction and produces an updated recommendation. Saves to `stage4/` and regenerates the viewer.
+- **Assumptions and belief triggers.** Agents now output `### Assumptions` and `### What Would Change My Mind` sections. Parsed with fuzzy heading matching ("Key Assumptions", "My Assumptions" all work). Prose fallback for non-bullet formats.
+- **SIGKILL timer fix.** Force-kill timer is now properly cleared on normal process exit, preventing leaked timers.
+- **Nudge skill** (`/council-nudge`). SKILL.md for the nudge workflow with usage examples.
+- **Schema version 2.** Sessions now include `schema_version: 2` for forward compatibility.
+
+### Changed
+
+- `dispatchWithQuorum()` uses retry wrapper for Stage 1, no retries for Stage 2.
+- Stage 1 prompt updated to request assumptions and belief update triggers.
+- 59 tests (up from 39), including preflight classification, nudge prompt, assumptions parsing, fuzzy headings.
+
+## [0.2.0] - 2026-04-05
+
+Viewer redesign, consensus fix, contextual nudges moved to skill flow.
+
+### Added
+
+- Contextual nudges in skill flow (removed global instruction nudges).
+- Cross-platform documentation (macOS/Linux, WSL for Windows).
+
+### Fixed
+
+- Consensus KPI now shows actual agreement percentage, not response rate.
+- Viewer includes chairman synthesis via regenerate-viewer command.
+- macOS compatibility for nudge install (awk instead of sed).
+
+### Changed
+
+- Redesigned HTML viewer: editorial monograph layout with tonal surfaces, tabbed agent opinions, peer review matrix, nudge timeline.
+
 ## [0.1.0] - 2026-03-29 — First Release
 
 Agent Council: convene a panel of CLI-based AI agents (Claude Code, Codex, Gemini CLI) to deliberate on engineering questions through structured multi-stage discussion, peer review, and synthesis.
