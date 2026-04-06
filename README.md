@@ -88,6 +88,7 @@ The same slash commands work in all three CLIs. The invoking agent automatically
 /council-replay council-20260329-143000    # Replay a session in terminal
 /council-revisit council-20260329-143000   # Re-run with current context (living decisions)
 /council-outcome council-20260329-143000 "It worked great"  # Record outcome
+/council-nudge council-20260329-143000 --agent codex --correction "Our data will never exceed 100GB"
 ```
 
 When invoked from Claude Code, Claude is chairman. From Codex, Codex is chairman. From Gemini, Gemini is chairman. The chairman gives its own independent opinion in Stage 1, then synthesizes all opinions in Stage 3.
@@ -106,6 +107,12 @@ bin/council --question-file question.txt --project myapp --with-review
 # Browse past sessions
 bin/council list --project myapp
 bin/council replay council-20260329-143000 --project myapp
+
+# Nudge: challenge an agent's assumptions after a session
+bin/council nudge council-20260329-143000 --agent codex --correction "Budget is not a constraint" --project myapp
+
+# Skip preflight health checks (faster startup)
+bin/council --question-file question.txt --project myapp --skip-preflight
 ```
 
 ## How It Works
@@ -139,6 +146,14 @@ bin/council replay council-20260329-143000 --project myapp
                     |  with consensus  |
                     |  and dissent     |
                     +------------------+
+                             |
+               Stage 4: Targeted Nudge (optional)
+                    "Your assumption about X is wrong"
+                             |
+                    +------------------+
+                    | Updated Opinion  |
+                    | with what changed|
+                    +------------------+
 ```
 
 **Stage 1:** ALL agents (including the chairman) answer independently, in parallel. Each gets your question + codebase context. No visibility into what others are producing. Once a quorum of opinions arrives, a grace window starts for slower agents.
@@ -146,6 +161,8 @@ bin/council replay council-20260329-143000 --project myapp
 **Stage 2** (optional): Each agent reviews the others' anonymized opinions. Scores them on correctness, completeness, and feasibility. Produces a ranking.
 
 **Stage 3:** The chairman (whichever CLI you invoked from) reads all opinions (including its own from Stage 1) and synthesizes: where they agree, where they diverge, and a final recommendation with confidence level. When agents fundamentally disagree, the synthesis flags it explicitly with per-agent confidence so you can decide.
+
+**Stage 4** (optional): After reading the verdict, you can nudge a specific agent: "Your assumption about X is wrong." The agent reconsiders with your correction and produces an updated recommendation explaining what changed and what stayed the same.
 
 ## Configuration
 
@@ -178,6 +195,7 @@ Council sessions are stored in `~/.council/{project}/`. Each session contains:
 - `meta.json` — question, agents, mode, timestamp
 - `stage1/opinion_*.json` — individual agent opinions
 - `stage2/review_*.json` — peer reviews (if `--with-review`)
+- `stage4/nudge_*.json` — nudge results (if nudge was used)
 - `synthesis.json` — chairman's final verdict
 - `viewer.html` — interactive viewer (open in browser)
 
@@ -185,13 +203,16 @@ Council sessions are stored in `~/.council/{project}/`. Each session contains:
 
 Every council session generates a self-contained HTML viewer. Open it in your browser to explore:
 
-- **Verdict-first layout** with KPI strip (agents, consensus, confidence, wall clock)
-- **Progressive depth**: recommendation always visible, then Reasoning / Trade-offs / Full Response as tabbed layers
+- **Editorial monograph layout** with tonal surface layering (no borders)
+- **Tabbed agent opinions** with full-width reading area showing recommendation, reasoning, assumptions, tradeoffs, belief triggers, and dissent
+- **Verdict section** with consensus/divergence cards and horizontal metadata strip
+- **Peer review matrix** with color-coded score pips and hover tooltips
+- **Nudge timeline** with before/after diffs and "what changed" explanations
 - **Light and dark mode** with toggle (respects system preference)
-- **Agent identity** via colored geometric icons (⬢ Claude, ⬣ Codex, ◆ Gemini)
+- **Agent identity** via colored geometric icons
 - **Outcome banners** when a decision outcome has been recorded
 - **Revisit comparison** side-by-side when viewing a revisited session
-- **DM Sans typography**, responsive layout, XSS-safe rendering
+- Self-contained HTML, zero external dependencies, responsive, XSS-safe
 
 ## Does It Work?
 
@@ -204,7 +225,7 @@ We ran 3 benchmark questions through the council and compared against a single a
 | Deployment (Kubernetes vs Docker Compose vs PaaS) | 3/5 (60%) | 4/5 (80%) | +1 |
 | **Average** | **27%** | **53%** | **+1.3** |
 
-The council found nearly 2x as many expected considerations. This measures consideration coverage (did the response mention scaling? cost? team experience?), not answer quality. Run your own eval: `bun run eval/run-eval.ts --dry-run` to see all 10 benchmarks.
+The council found nearly 2x as many expected considerations. This measures consideration coverage (did the response mention scaling? cost? team experience?), not answer quality. Run your own eval: `bun run eval/run-eval.ts --dry-run` to see all 10 benchmarks. The test suite has 59 tests with 133 assertions covering adapters, parsing, prompts, preflight, nudge, and viewer generation.
 
 ## Proactive Suggestions
 
@@ -237,8 +258,10 @@ Suggestions are quiet (a single line after the response), max 2 per session, and
 
 ## Roadmap
 
-- **v0.1.0** (done): Three-stage deliberation, 3 adapters, redesigned viewer, cross-platform skills (Claude Code + Codex + Gemini), living decisions, outcome tracking, security hardening, progressive output, proactive nudge system, evaluation benchmarks
-- **Next:** Shareable deliberation exports, calibration profiles (which model is best at what), `council.ts` modular refactor
+- **v0.1.0** (done): Three-stage deliberation, 3 adapters, cross-platform skills (Claude Code + Codex + Gemini), living decisions, outcome tracking, security hardening, progressive output, proactive nudge system, evaluation benchmarks
+- **v0.2.0** (done): Editorial monograph viewer redesign, consensus KPI fix, contextual nudges in skill flow
+- **v0.3.0** (done): Preflight health checks, error classification, retry wrapper, nudge subcommand (challenge agent assumptions), assumptions/belief trigger parsing, 59 tests
+- **Next:** Shareable deliberation exports, calibration profiles (which model is best at what), input snapshotting for reproducible sessions
 
 ## License
 
