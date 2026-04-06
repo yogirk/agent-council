@@ -6,7 +6,7 @@ Multi-agent deliberation tool. Convenes Claude Code, Codex CLI, and Gemini CLI t
 
 - `src/council.ts` — CLI entry point, orchestration, subprocess dispatch, quorum logic, all subcommands
 - `src/adapters.ts` — Agent adapters (Claude, Codex, Gemini) + shared types (SessionMeta, AgentResult)
-- `src/prompts.ts` — Stage 1, 2, 3 prompt templates
+- `src/prompts.ts` — Stage 1, 2, 3, 4 (nudge) prompt templates
 - `src/viewer.ts` — Self-contained HTML viewer generation (verdict-first, progressive depth, light/dark mode)
 - `bin/council` — Bun entry script
 - `skills/claude-code/` — SKILL.md files for all slash commands (cross-platform compatible)
@@ -27,6 +27,11 @@ Fixtures: `tests/fixtures/` — real CLI output from Claude, Codex, Gemini
 - SKILL.md files use universal binary discovery (checks all CLI skill directories)
 - Viewer uses `escapeJsonForScript()` for XSS protection + `textContent` everywhere (no innerHTML)
 - `main()` is guarded from running during test imports
+- `classifyError()` returns typed `ErrorClass` for actionable error messages
+- `preflightCheck()` validates agent health (version + no-op prompt) before sessions
+- `dispatchAgentWithRetry()` retries transient failures (timeout, rate_limit) once
+- `parseStructuredSections()` uses fuzzy heading aliases for assumption/belief parsing
+- `runNudge()` dispatches Stage 4 correction to a single agent, saves to `stage4/`
 
 ## Storage
 
