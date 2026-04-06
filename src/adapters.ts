@@ -39,8 +39,6 @@ export interface AgentResult {
   tradeoffs?: string;
   confidence?: string;
   dissent_points?: string;
-  assumptions?: string[];
-  belief_update_trigger?: string;
   raw_response?: string;
   error?: string;
   error_class?: ErrorClass;
