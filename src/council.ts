@@ -6,10 +6,15 @@ import {
   type AgentId,
   type AgentResult,
   type SessionMeta,
+  type PreflightStatus,
+  type ErrorClass,
   detectAgents,
   allAdapters,
+  classifyError,
+  errorClassMessage,
+  preflightCheck,
 } from "./adapters";
-import { stage1Prompt, stage2Prompt } from "./prompts";
+import { stage1Prompt, stage2Prompt, stage4NudgePrompt } from "./prompts";
 import { generateViewer } from "./viewer";
 
 // --- Types ---
@@ -97,11 +102,11 @@ async function dispatchAgent(
   });
 
   let timedOut = false;
+  let killTimer: ReturnType<typeof setTimeout> | null = null;
   const timer = setTimeout(() => {
     timedOut = true;
     proc.kill("SIGTERM");
-    // Force kill after 5s if still alive
-    setTimeout(() => proc.kill("SIGKILL"), 5000);
+    killTimer = setTimeout(() => proc.kill("SIGKILL"), 5000);
   }, timeoutMs);
 
   try {
@@ -111,6 +116,7 @@ async function dispatchAgent(
       new Response(proc.stderr).text(),
     ]);
     clearTimeout(timer);
+    if (killTimer) clearTimeout(killTimer);
     const durationMs = Date.now() - startTime;
 
     if (timedOut) {
@@ -120,25 +126,55 @@ async function dispatchAgent(
         structured: false,
         response: "",
         error: `Agent did not respond within ${timeoutMs / 1000} seconds`,
+        error_class: "timeout" as ErrorClass,
         raw_stderr: stderr,
         duration_ms: durationMs,
         timestamp: new Date().toISOString(),
       };
     }
 
-    return adapter.parseOutput(stdout, stderr, exitCode, durationMs);
+    const result = adapter.parseOutput(stdout, stderr, exitCode, durationMs);
+    if (result.status === "error" && result.raw_stderr) {
+      result.error_class = classifyError(result.raw_stderr);
+    }
+    return result;
   } catch (e: any) {
     clearTimeout(timer);
+    if (killTimer) clearTimeout(killTimer);
     return {
       agent: adapter.id,
       status: "error",
       structured: false,
       response: "",
       error: e.message,
+      error_class: "unknown" as ErrorClass,
       duration_ms: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     };
   }
+}
+
+// --- Retry wrapper ---
+
+const RETRYABLE_ERRORS: Set<ErrorClass> = new Set(["timeout", "rate_limit", "unknown"]);
+
+async function dispatchAgentWithRetry(
+  adapter: AgentAdapter,
+  prompt: string,
+  repoRoot: string,
+  timeoutMs: number,
+  retries: number = 1
+): Promise<AgentResult> {
+  const result = await dispatchAgent(adapter, prompt, repoRoot, timeoutMs);
+  if (result.status === "ok" || retries <= 0) return result;
+
+  // Only retry transient failures
+  const ec = result.error_class || "unknown";
+  if (!RETRYABLE_ERRORS.has(ec)) return result;
+
+  console.error(`  ${adapter.id} failed (${ec}). Retrying in 3s...`);
+  await new Promise((r) => setTimeout(r, 3000));
+  return dispatchAgent(adapter, prompt, repoRoot, timeoutMs);
 }
 
 // --- Stage 1: Independent Opinions (with quorum + grace window) ---
@@ -149,7 +185,8 @@ async function dispatchWithQuorum(
   repoRoot: string,
   timeouts: Record<string, number>,
   gracePeriodMs: number,
-  stageName: string
+  stageName: string,
+  retries: number = 1
 ): Promise<AgentResult[]> {
   const quorum = Math.max(2, members.length - 1); // need N-1 or at least 2
 
@@ -191,7 +228,7 @@ async function dispatchWithQuorum(
 
     members.forEach((adapter, i) => {
       const agentTimeout = timeouts[adapter.id] || 120_000;
-      dispatchAgent(adapter, prompt, repoRoot, agentTimeout).then((result) => {
+      dispatchAgentWithRetry(adapter, prompt, repoRoot, agentTimeout, retries).then((result) => {
         results[i] = result;
         completedCount++;
         if (result.status === "ok") {
@@ -265,7 +302,7 @@ async function runStage2(
 ): Promise<AgentResult[]> {
   const { anonymized } = anonymizeOpinions(opinions);
   const prompt = stage2Prompt(question, anonymized);
-  return dispatchWithQuorum(members, prompt, repoRoot, timeouts, gracePeriodMs, "Stage 2");
+  return dispatchWithQuorum(members, prompt, repoRoot, timeouts, gracePeriodMs, "Stage 2", 0);
 }
 
 // --- Storage ---
@@ -475,6 +512,7 @@ async function revisitSession(
     context_files: contextFiles,
     parent_id: parentSessionId,
     revisits: [],
+    schema_version: 2,
   };
   await writeJson(sessionDir, "meta.json", meta);
 
@@ -529,10 +567,111 @@ async function recordOutcome(
   console.log(`Viewer updated: ${resolve(sessionDir, "viewer.html")}`);
 }
 
+// --- Stage 4: Targeted Nudge ---
+
+async function runNudge(
+  project: string,
+  sessionId: string,
+  targetAgent: AgentId,
+  correction: string,
+  config: CouncilConfig
+): Promise<void> {
+  const sessionDir = resolve(councilHome(), project, sessionId);
+  if (!existsSync(sessionDir)) {
+    console.error(`Session not found: ${sessionId}`);
+    console.error(`Looking in: ${sessionDir}`);
+    process.exit(1);
+  }
+
+  const metaPath = resolve(sessionDir, "meta.json");
+  if (!existsSync(metaPath)) {
+    console.error(`No meta.json in session: ${sessionId}`);
+    process.exit(1);
+  }
+  const meta: SessionMeta = JSON.parse(readFileSync(metaPath, "utf-8"));
+
+  // Load target agent's original opinion
+  const opinionPath = resolve(sessionDir, "stage1", `opinion_${targetAgent}.json`);
+  if (!existsSync(opinionPath)) {
+    console.error(`No opinion found for ${targetAgent} in session ${sessionId}`);
+    console.error(`Looking for: ${opinionPath}`);
+    process.exit(1);
+  }
+  const originalOpinion: AgentResult = JSON.parse(readFileSync(opinionPath, "utf-8"));
+
+  if (originalOpinion.status !== "ok") {
+    console.error(`Cannot nudge ${targetAgent}: original opinion was ${originalOpinion.status}`);
+    process.exit(1);
+  }
+
+  // Find the adapter for this agent
+  const adapter = allAdapters.find((a) => a.id === targetAgent);
+  if (!adapter) {
+    console.error(`Unknown agent: ${targetAgent}`);
+    process.exit(1);
+  }
+
+  // Preflight check before nudge
+  const repoRoot = detectRepoRoot();
+  const pf = await preflightCheck(adapter, repoRoot);
+  if (pf.status === "down") {
+    console.error(`Cannot nudge: ${targetAgent} is not available (${pf.reason}). Fix and retry.`);
+    process.exit(1);
+  }
+  if (pf.status === "degraded") {
+    console.error(`Warning: ${targetAgent} may be degraded (${pf.reason}). Attempting anyway...`);
+  }
+
+  // Build Stage 4 prompt
+  const prompt = stage4NudgePrompt(meta.question, originalOpinion.response, correction);
+  const agentTimeout = config.timeout_ms[targetAgent] || 120_000;
+
+  console.error(`\nNudging ${targetAgent} with correction...`);
+  console.error(`  Original recommendation: ${originalOpinion.recommendation?.slice(0, 80) || "(unstructured)"}...`);
+  console.error(`  Correction: ${correction.slice(0, 100)}${correction.length > 100 ? "..." : ""}`);
+
+  // Dispatch (no retry for nudge — user can re-run manually)
+  const result = await dispatchAgent(adapter, prompt, repoRoot, agentTimeout);
+
+  // Save nudge result
+  const stage4Dir = resolve(sessionDir, "stage4");
+  mkdirSync(stage4Dir, { recursive: true });
+  const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  const nudgeData = {
+    ...result,
+    nudge_meta: {
+      correction,
+      original_recommendation: originalOpinion.recommendation,
+      original_confidence: originalOpinion.confidence,
+      timestamp: new Date().toISOString(),
+    },
+  };
+  await writeJson(stage4Dir, `nudge_${targetAgent}_${timestamp}.json`, nudgeData);
+
+  if (result.status === "ok") {
+    console.error(`  ${targetAgent} responded (${(result.duration_ms / 1000).toFixed(1)}s)`);
+    if (result.recommendation) {
+      console.error(`  Updated recommendation: ${result.recommendation.slice(0, 120)}`);
+    }
+  } else {
+    console.error(`  ${targetAgent} ${result.status}: ${result.error}`);
+  }
+
+  // Regenerate viewer with nudge data
+  const stage1Dir = resolve(sessionDir, "stage1");
+  const opinions: AgentResult[] = readdirSync(stage1Dir)
+    .filter((f) => f.startsWith("opinion_") && f.endsWith(".json"))
+    .map((f) => JSON.parse(readFileSync(resolve(stage1Dir, f), "utf-8")));
+  generateViewer(sessionDir, meta, opinions);
+
+  console.log(sessionDir);
+  console.error(`\nNudge complete. Viewer updated: ${resolve(sessionDir, "viewer.html")}`);
+}
+
 // --- CLI Arg Parsing ---
 
 function parseArgs(): {
-  command: "run" | "list" | "replay" | "revisit" | "outcome" | "regenerate-viewer";
+  command: "run" | "list" | "replay" | "revisit" | "outcome" | "regenerate-viewer" | "nudge";
   chairman: AgentId;
   questionFile?: string;
   project: string;
@@ -540,13 +679,16 @@ function parseArgs(): {
   contextFiles: string[];
   sessionId?: string;
   outcomeResult?: string;
+  skipPreflight: boolean;
+  nudgeAgent?: AgentId;
+  nudgeCorrection?: string;
 } {
   const args = process.argv.slice(2);
 
   // Subcommands
   if (args[0] === "list") {
     const project = getFlag(args, "--project") || detectProjectSlug();
-    return { command: "list", chairman: detectChairman(), project, mode: "fast", contextFiles: [] };
+    return { command: "list", chairman: detectChairman(), project, mode: "fast", contextFiles: [], skipPreflight: true };
   }
   if (args[0] === "replay") {
     const sessionId = args[1];
@@ -562,6 +704,7 @@ function parseArgs(): {
       mode: "fast",
       contextFiles: [],
       sessionId,
+      skipPreflight: true,
     };
   }
   if (args[0] === "revisit") {
@@ -581,6 +724,7 @@ function parseArgs(): {
       mode: "fast",
       contextFiles,
       sessionId,
+      skipPreflight: true,
     };
   }
   if (args[0] === "regenerate-viewer") {
@@ -597,6 +741,7 @@ function parseArgs(): {
       mode: "fast" as const,
       contextFiles: [],
       sessionId,
+      skipPreflight: true,
     };
   }
   if (args[0] === "outcome") {
@@ -619,6 +764,38 @@ function parseArgs(): {
       contextFiles: [],
       sessionId,
       outcomeResult: result,
+      skipPreflight: true,
+    };
+  }
+
+  if (args[0] === "nudge") {
+    const sessionId = args[1];
+    if (!sessionId) {
+      console.error("Usage: council nudge <session-id> --agent <agent> --correction \"text\"");
+      process.exit(1);
+    }
+    const nudgeAgent = getFlag(args, "--agent");
+    if (!nudgeAgent || !VALID_AGENT_IDS.includes(nudgeAgent)) {
+      console.error("Usage: council nudge <session-id> --agent <agent> --correction \"text\"");
+      console.error(`  --agent must be one of: ${VALID_AGENT_IDS.join(", ")}`);
+      process.exit(1);
+    }
+    const nudgeCorrection = getFlag(args, "--correction");
+    if (!nudgeCorrection) {
+      console.error("Usage: council nudge <session-id> --agent <agent> --correction \"text\"");
+      process.exit(1);
+    }
+    const project = getFlag(args, "--project") || detectProjectSlug();
+    return {
+      command: "nudge",
+      chairman: detectChairman(),
+      project: validateProjectSlug(project),
+      mode: "fast",
+      contextFiles: [],
+      sessionId,
+      skipPreflight: false,
+      nudgeAgent: nudgeAgent as AgentId,
+      nudgeCorrection,
     };
   }
 
@@ -638,7 +815,8 @@ function parseArgs(): {
     process.exit(1);
   }
 
-  return { command: "run", chairman, questionFile, project, mode, contextFiles };
+  const skipPreflight = args.includes("--skip-preflight");
+  return { command: "run", chairman, questionFile, project, mode, contextFiles, skipPreflight };
 }
 
 function getFlag(args: string[], flag: string): string | undefined {
@@ -807,6 +985,18 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Handle nudge
+  if (parsed.command === "nudge") {
+    await runNudge(
+      parsed.project,
+      parsed.sessionId!,
+      parsed.nudgeAgent!,
+      parsed.nudgeCorrection!,
+      config
+    );
+    return;
+  }
+
   // Run a council session
   const repoRoot = detectRepoRoot();
   const question = readFileSync(parsed.questionFile!, "utf-8").trim();
@@ -825,6 +1015,24 @@ async function main(): Promise<void> {
 
   console.error(`Detected agents: ${availableIds.join(", ")}`);
   console.error(`Chairman: ${parsed.chairman}`);
+
+  // Preflight health check (diagnostic only, never excludes agents)
+  if (!parsed.skipPreflight) {
+    console.error("\nRunning preflight checks...");
+    const preflightResults = await Promise.all(
+      available.map((a) => preflightCheck(a, repoRoot))
+    );
+    for (const pf of preflightResults) {
+      if (pf.status === "ready") {
+        console.error(`  ${pf.agent}: ready`);
+      } else if (pf.status === "degraded") {
+        console.error(`  ${pf.agent}: degraded — ${pf.reason}`);
+      } else {
+        console.error(`  ${pf.agent}: down — ${pf.reason}`);
+      }
+    }
+    console.error("");
+  }
 
   // ALL agents participate in Stage 1 (including the chairman).
   // The chairman also synthesizes in Stage 3 via the SKILL.md.
@@ -881,6 +1089,7 @@ async function main(): Promise<void> {
       context_files: parsed.contextFiles,
       parent_id: null,
       revisits: [],
+      schema_version: 2,
       error: "All agents failed",
     });
     process.exit(1);
@@ -926,6 +1135,7 @@ async function main(): Promise<void> {
     context_files: parsed.contextFiles,
     parent_id: null,
     revisits: [],
+    schema_version: 2,
   };
   await writeJson(sessionDir, "meta.json", meta);
 

@@ -6,7 +6,7 @@ Multi-agent deliberation tool. Convenes Claude Code, Codex CLI, and Gemini CLI t
 
 - `src/council.ts` — CLI entry point, orchestration, subprocess dispatch, quorum logic, all subcommands
 - `src/adapters.ts` — Agent adapters (Claude, Codex, Gemini) + shared types (SessionMeta, AgentResult)
-- `src/prompts.ts` — Stage 1, 2, 3 prompt templates
+- `src/prompts.ts` — Stage 1, 2, 3, 4 (nudge) prompt templates
 - `src/viewer.ts` — Self-contained HTML viewer generation (verdict-first, progressive depth, light/dark mode)
 - `bin/council` — Bun entry script
 - `skills/claude-code/` — SKILL.md files for all slash commands (cross-platform compatible)
@@ -27,6 +27,11 @@ Fixtures: `tests/fixtures/` — real CLI output from Claude, Codex, Gemini
 - SKILL.md files use universal binary discovery (checks all CLI skill directories)
 - Viewer uses `escapeJsonForScript()` for XSS protection + `textContent` everywhere (no innerHTML)
 - `main()` is guarded from running during test imports
+- `classifyError()` returns typed `ErrorClass` for actionable error messages
+- `preflightCheck()` validates agent health (version + no-op prompt) before sessions
+- `dispatchAgentWithRetry()` retries transient failures (timeout, rate_limit) once
+- `parseStructuredSections()` uses fuzzy heading aliases for assumption/belief parsing
+- `runNudge()` dispatches Stage 4 correction to a single agent, saves to `stage4/`
 
 ## Storage
 
@@ -39,3 +44,23 @@ Config: `~/.council/config.json`
 - Quorum grace: 30s
 - Models: claude-opus-4-6, gpt-5.4, gemini-3.1-pro
 - Proactive nudges: true
+
+## Skill routing
+
+When the user's request matches an available skill, ALWAYS invoke it using the Skill
+tool as your FIRST action. Do NOT answer directly, do NOT use other tools first.
+The skill has specialized workflows that produce better results than ad-hoc answers.
+
+Key routing rules:
+- Product ideas, "is this worth building", brainstorming → invoke office-hours
+- Bugs, errors, "why is this broken", 500 errors → invoke investigate
+- Ship, deploy, push, create PR → invoke ship
+- QA, test the site, find bugs → invoke qa
+- Code review, check my diff → invoke review
+- Update docs after shipping → invoke document-release
+- Weekly retro → invoke retro
+- Design system, brand → invoke design-consultation
+- Visual audit, design polish → invoke design-review
+- Architecture review → invoke plan-eng-review
+- Save progress, checkpoint, resume → invoke checkpoint
+- Code quality, health check → invoke health
