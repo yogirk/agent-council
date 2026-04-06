@@ -1155,13 +1155,46 @@ function detectRepoRoot(): string {
   return process.cwd();
 }
 
+// --- Update check (non-blocking) ---
+
+function getLocalVersion(): string | null {
+  const versionPath = resolve(homedir(), ".council", "agent-council", "VERSION");
+  try {
+    return readFileSync(versionPath, "utf-8").trim();
+  } catch {
+    return null;
+  }
+}
+
+async function checkForUpdate(): Promise<void> {
+  const local = getLocalVersion();
+  if (!local) return;
+
+  try {
+    const proc = Bun.spawn(["npm", "view", "cliagent-council", "version"], {
+      stdout: "pipe",
+      stderr: "ignore",
+    });
+    const output = await new Response(proc.stdout).text();
+    const latest = output.trim();
+    if (latest && latest !== local) {
+      console.log(`\n  Update available: ${local} → ${latest}`);
+      console.log(`  Run: npx cliagent-council   to upgrade\n`);
+    }
+  } catch {
+    // Silent — never block on update check failure
+  }
+}
+
 // Run main() unless this file was imported by a test runner
 // Bun.main is the entry point; when tests import us, Bun.main is the test file
 const _entryFile = Bun.main;
 const _isTestImport = _entryFile.includes("bun-test") || _entryFile.includes("/tests/") || _entryFile.endsWith(".test.ts");
 if (!_isTestImport) {
-  main().catch((e) => {
-    console.error(`Fatal error: ${e.message}`);
-    process.exit(1);
-  });
+  checkForUpdate().then(() =>
+    main().catch((e) => {
+      console.error(`Fatal error: ${e.message}`);
+      process.exit(1);
+    })
+  );
 }

@@ -56,7 +56,9 @@ describe("generateViewer", () => {
     expect(html).toContain("Agent Council");
     expect(html).toContain("council-20260329-120000");
     expect(html).toContain("--font-display");
-    expect(html).not.toContain(".innerHTML");
+    // innerHTML is used by mdEl() for markdown rendering, but renderMd() escapes HTML entities first
+    expect(html).toContain("renderMd");
+    expect(html).toContain(".replace(/&/g"); // verify HTML escaping is present
   });
 
   test("renders tabbed opinions layout", () => {

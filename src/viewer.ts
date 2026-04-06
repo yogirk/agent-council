@@ -463,10 +463,10 @@ body {
 
 .verdict-rec {
   font-family: var(--font-display);
-  font-size: 1.2rem;
-  line-height: 1.75;
+  font-size: 1rem;
+  line-height: 1.6;
   color: var(--on-surface);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   border-left: 3px solid var(--primary);
   padding-left: 1rem;
 }
@@ -513,6 +513,60 @@ body {
   font-size: 0.88rem;
   line-height: 1.65;
   color: var(--on-surface-2);
+}
+
+/* Rendered markdown inside viewer sections */
+.verdict-rec h2, .verdict-rec h3, .verdict-rec h4,
+.verdict-card-text h2, .verdict-card-text h3, .verdict-card-text h4,
+.agent-sub-text h2, .agent-sub-text h3, .agent-sub-text h4,
+.reasoning-bullet h2, .reasoning-bullet h3, .reasoning-bullet h4 {
+  font-family: var(--font-display);
+  color: var(--on-surface);
+  margin: 0.75rem 0 0.15rem 0;
+}
+.verdict-rec h2:first-child, .verdict-rec h3:first-child, .verdict-rec h4:first-child {
+  margin-top: 0;
+}
+.verdict-rec h2, .verdict-card-text h2, .agent-sub-text h2 { font-size: 1.05rem; }
+.verdict-rec h3, .verdict-card-text h3, .agent-sub-text h3 { font-size: 0.95rem; }
+.verdict-rec h4, .verdict-card-text h4, .agent-sub-text h4 { font-size: 0.9rem; }
+
+.verdict-rec p, .verdict-card-text p, .agent-sub-text p, .reasoning-bullet p {
+  margin: 0.2rem 0;
+}
+.verdict-rec ul, .verdict-rec ol,
+.verdict-card-text ul, .verdict-card-text ol,
+.agent-sub-text ul, .agent-sub-text ol,
+.reasoning-bullet ul, .reasoning-bullet ol {
+  margin: 0.15rem 0;
+  padding-left: 1.4rem;
+}
+.verdict-rec li, .verdict-card-text li, .agent-sub-text li, .reasoning-bullet li {
+  margin: 0.2rem 0;
+}
+.verdict-rec code, .verdict-card-text code, .agent-sub-text code, .reasoning-bullet code {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85em;
+  background: var(--ghost);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+}
+.verdict-rec pre, .verdict-card-text pre, .agent-sub-text pre, .reasoning-bullet pre {
+  background: var(--ghost);
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.verdict-rec pre code, .verdict-card-text pre code,
+.agent-sub-text pre code, .reasoning-bullet pre code {
+  background: none;
+  padding: 0;
+}
+.verdict-rec strong, .verdict-card-text strong,
+.agent-sub-text strong, .reasoning-bullet strong {
+  font-weight: 600;
+  color: var(--on-surface);
 }
 
 /* Meta strip */
@@ -1297,6 +1351,62 @@ function stripMd(text) {
   return text.replace(/\\*\\*/g, '').replace(/\\*/g, '').replace(/^- /gm, '');
 }
 
+function renderMd(text) {
+  if (!text) return '';
+  // Escape HTML entities first for safety
+  var s = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Code blocks (fenced)
+  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, '<pre><code>$1</code></pre>');
+  // Inline code
+  s = s.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+  // Headings (## before bold so ** inside headings works)
+  s = s.replace(/^### (.+)$/gm, '<h4>$1</h4>');
+  s = s.replace(/^## (.+)$/gm, '<h3>$1</h3>');
+  s = s.replace(/^# (.+)$/gm, '<h2>$1</h2>');
+  // Bold + italic
+  s = s.replace(/\\*\\*\\*(.+?)\\*\\*\\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$1</strong>');
+  s = s.replace(/\\*(.+?)\\*/g, '<em>$1</em>');
+  // Unordered lists — collect consecutive "- " lines into <ul>
+  s = s.replace(/(^- .+$(?:\\n^- .+$)*)/gm, function(block) {
+    var items = block.split('\\n').map(function(l) {
+      return '<li>' + l.replace(/^- /, '') + '</li>';
+    }).join('');
+    return '<ul>' + items + '</ul>';
+  });
+  // Ordered lists — collect consecutive "N. " lines into <ol>
+  s = s.replace(/(^\\d+\\. .+$(?:\\n^\\d+\\. .+$)*)/gm, function(block) {
+    var items = block.split('\\n').map(function(l) {
+      return '<li>' + l.replace(/^\\d+\\.\\s*/, '') + '</li>';
+    }).join('');
+    return '<ol>' + items + '</ol>';
+  });
+  // Paragraphs — double newlines become <p> breaks
+  s = s.replace(/\\n{2,}/g, '</p><p>');
+  // Single newlines become <br> (except inside block elements)
+  s = s.replace(/\\n/g, '<br>');
+  // Wrap in paragraph
+  s = '<p>' + s + '</p>';
+  // Clean up empty paragraphs and p-around-blocks
+  s = s.replace(/<p><\\/p>/g, '');
+  s = s.replace(/<p>(<h[2-4]>)/g, '$1');
+  s = s.replace(/(<\\/h[2-4]>)<\\/p>/g, '$1');
+  s = s.replace(/<p>(<ul>)/g, '$1');
+  s = s.replace(/(<\\/ul>)<\\/p>/g, '$1');
+  s = s.replace(/<p>(<ol>)/g, '$1');
+  s = s.replace(/(<\\/ol>)<\\/p>/g, '$1');
+  s = s.replace(/<p>(<pre>)/g, '$1');
+  s = s.replace(/(<\\/pre>)<\\/p>/g, '$1');
+  return s;
+}
+
+function mdEl(className, text) {
+  var d = document.createElement('div');
+  if (className) d.className = className;
+  d.innerHTML = renderMd(text);
+  return d;
+}
+
 // ════════════════════════════════════════
 // THEME
 // ════════════════════════════════════════
@@ -1371,21 +1481,21 @@ function renderVerdict(synthesis, meta, opinions) {
   // Main verdict box
   var main = el('div', { className: 'verdict-main' });
   main.appendChild(el('div', { className: 'section-label' }, 'Verdict'));
-  main.appendChild(el('div', { className: 'verdict-rec' }, synthesis.recommendation));
+  main.appendChild(mdEl('verdict-rec', synthesis.recommendation));
 
   var grid = el('div', { className: 'verdict-grid' });
 
   if (synthesis.consensus) {
     var cCard = el('div', { className: 'verdict-card verdict-card--consensus' });
     cCard.appendChild(el('div', { className: 'verdict-card-label' }, 'Consensus'));
-    cCard.appendChild(el('div', { className: 'verdict-card-text' }, synthesis.consensus));
+    cCard.appendChild(mdEl('verdict-card-text', synthesis.consensus));
     grid.appendChild(cCard);
   }
 
   if (synthesis.divergence) {
     var dCard = el('div', { className: 'verdict-card verdict-card--divergence' });
     dCard.appendChild(el('div', { className: 'verdict-card-label' }, 'Divergence'));
-    dCard.appendChild(el('div', { className: 'verdict-card-text' }, synthesis.divergence));
+    dCard.appendChild(mdEl('verdict-card-text', synthesis.divergence));
     grid.appendChild(dCard);
   }
 
@@ -1494,7 +1604,7 @@ function renderOpinions(opinions) {
     // Recommendation
     var recSub = el('div', { className: 'agent-sub' });
     recSub.appendChild(el('div', { className: 'agent-sub-label' }, 'Recommendation'));
-    recSub.appendChild(el('div', { className: 'agent-sub-text' }, stripMd(op.recommendation || op.response.slice(0, 300))));
+    recSub.appendChild(mdEl('agent-sub-text', op.recommendation || op.response.slice(0, 300)));
     body.appendChild(recSub);
 
     // Full reasoning trace — collapsed
@@ -1532,7 +1642,7 @@ function renderOpinions(opinions) {
       var rSub = el('div', { className: 'agent-sub' });
       rSub.appendChild(el('div', { className: 'agent-sub-label' }, 'Reasoning'));
       for (var ri = 0; ri < op.reasoning.length; ri++) {
-        rSub.appendChild(el('div', { className: 'reasoning-bullet' }, stripMd(op.reasoning[ri])));
+        rSub.appendChild(mdEl('reasoning-bullet', op.reasoning[ri]));
       }
       body.appendChild(rSub);
     }
@@ -1553,7 +1663,7 @@ function renderOpinions(opinions) {
     if (op.tradeoffs) {
       var tSub = el('div', { className: 'agent-sub' });
       tSub.appendChild(el('div', { className: 'agent-sub-label' }, 'Tradeoffs'));
-      tSub.appendChild(el('div', { className: 'agent-sub-text' }, stripMd(op.tradeoffs)));
+      tSub.appendChild(mdEl('agent-sub-text', op.tradeoffs));
       body.appendChild(tSub);
     }
 
@@ -1810,10 +1920,12 @@ function renderNudges(nudges) {
           letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--error)',
           marginBottom: '0.25rem'
         }}, 'Before'));
-        diffCard.appendChild(el('p', { style: {
-          fontSize: '0.82rem', color: 'var(--on-surface-3)',
-          textDecoration: 'line-through', marginBottom: '0.75rem'
-        }}, stripMd(n.original_recommendation)));
+        var beforeP = mdEl(null, n.original_recommendation);
+        beforeP.style.fontSize = '0.82rem';
+        beforeP.style.color = 'var(--on-surface-3)';
+        beforeP.style.textDecoration = 'line-through';
+        beforeP.style.marginBottom = '0.75rem';
+        diffCard.appendChild(beforeP);
       }
 
       if (n.recommendation) {
@@ -1822,9 +1934,10 @@ function renderNudges(nudges) {
           letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--tertiary)',
           marginBottom: '0.25rem'
         }}, 'After'));
-        diffCard.appendChild(el('p', { style: {
-          fontSize: '0.85rem', color: 'var(--on-surface)'
-        }}, stripMd(n.recommendation)));
+        var afterP = mdEl(null, n.recommendation);
+        afterP.style.fontSize = '0.85rem';
+        afterP.style.color = 'var(--on-surface)';
+        diffCard.appendChild(afterP);
       }
 
       content.appendChild(diffCard);

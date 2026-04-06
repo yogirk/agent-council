@@ -1,6 +1,6 @@
 {
   "name": "cliagent-council",
-  "version": "0.3.0",
+  "version": "0.3.3",
   "description": "Convene a panel of CLI-based AI agents to deliberate on engineering problems",
   "type": "module",
   "main": "install.cjs",
@@ -23,9 +23,14 @@
     "gemini",
     "cli"
   ],
+  "files": [
+    "install.cjs",
+    "README.md",
+    "LICENSE"
+  ],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yogirk/agent-council.git"
+    "url": "git+https://github.com/yogirk/agent-council.git"
   }
 }
