@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync } from "fs";
 import { resolve, basename, join } from "path";
 import { homedir } from "os";
 import {
@@ -318,6 +318,15 @@ function createSessionDir(project: string): { sessionId: string; sessionDir: str
   return { sessionId, sessionDir };
 }
 
+async function writeSnapshot(sessionDir: string, context: string): Promise<void> {
+  if (!context) return;
+  const tmpPath = resolve(sessionDir, ".context_snapshot.txt.tmp");
+  const finalPath = resolve(sessionDir, "context_snapshot.txt");
+  await Bun.write(tmpPath, context);
+  const { renameSync } = await import("fs");
+  renameSync(tmpPath, finalPath);
+}
+
 async function writeJson(dir: string, filename: string, data: any): Promise<void> {
   const tmpPath = resolve(dir, `.${filename}.tmp`);
   const finalPath = resolve(dir, filename);
@@ -470,6 +479,9 @@ async function revisitSession(
   const { sessionId, sessionDir } = createSessionDir(project);
   console.error(`New session: ${sessionId}`);
   console.error(`Storage: ${sessionDir}`);
+
+  // Snapshot context for reproducibility
+  await writeSnapshot(sessionDir, context);
 
   // Run Stage 1 with original question + current context
   const opinions = await runStage1(
@@ -842,10 +854,11 @@ const VALID_AGENT_IDS = ["claude", "codex", "gemini"];
 function detectChairman(): AgentId {
   // Detect which CLI is invoking us by walking the process tree
   try {
-    const { execSync } = require("child_process");
     let pid = process.ppid;
     for (let i = 0; i < 5 && pid > 1; i++) {
-      const info = execSync(`ps -o ppid=,comm= -p ${pid} 2>/dev/null`, { encoding: "utf-8" }).trim();
+      const result = Bun.spawnSync(["ps", "-o", "ppid=,comm=", "-p", String(pid)], { stderr: "ignore" });
+      const info = result.stdout.toString().trim();
+      if (!info) break;
       const parts = info.split(/\s+/);
       const cmd = (parts[parts.length - 1] || "").replace(/.*\//, "");
       if (cmd === "codex") return "codex";
@@ -873,7 +886,6 @@ function isPathSafe(file: string, repoRoot: string): { safe: boolean; reason?: s
   }
   const fullPath = resolve(repoRoot, file);
   try {
-    const { realpathSync } = require("fs");
     const realPath = realpathSync(fullPath);
     const realRoot = realpathSync(repoRoot);
     if (!realPath.startsWith(realRoot + "/") && realPath !== realRoot) {
@@ -1051,6 +1063,9 @@ async function main(): Promise<void> {
   const { sessionId, sessionDir } = createSessionDir(parsed.project);
   console.error(`Session: ${sessionId}`);
   console.error(`Storage: ${sessionDir}`);
+
+  // Snapshot context for reproducibility
+  await writeSnapshot(sessionDir, context);
 
   // Stage 1: Independent opinions
   const opinions = await runStage1(
