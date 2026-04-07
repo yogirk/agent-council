@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0] - 2026-04-07
+
+### Changed
+
+- **Bun-native subprocess calls.** Replaced `require("child_process").execSync` in `detectChairman()` with `Bun.spawnSync`. Replaced inline `require("fs")` in `isPathSafe()` with the existing top-level import. Zero CommonJS requires remain.
+- **Context snapshotting.** Sessions now save a `context_snapshot.txt` with the resolved file contents agents saw at dispatch time. Enables accurate revisit and nudge comparisons even when source files change between sessions. Applies to both `run` and `revisit` flows.
+
 ## [0.3.0] - 2026-04-06 — Epistemic Debugger
 
 Reliability, error intelligence, and the ability to challenge agent assumptions mid-session.
