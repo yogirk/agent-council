@@ -339,7 +339,7 @@ export const codexAdapter: AgentAdapter = {
   detect: () => binaryExists("codex"),
 
   command(prompt: string, repoRoot: string): string[] {
-    return ["codex", "exec", prompt, "-C", repoRoot, "-s", "read-only", "--json"];
+    return ["codex", "exec", prompt, "-C", repoRoot, "--skip-git-repo-check", "-s", "read-only", "--json"];
   },
 
   parseOutput(stdout, stderr, exitCode, durationMs) {
