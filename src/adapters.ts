@@ -484,14 +484,23 @@ export const geminiAdapter: AgentAdapter = {
     if (!cleaned) {
       return makeError("gemini", "Empty stdout", stderr, durationMs);
     }
-    // Try JSON parse first (proper -o json mode).
+    // Try JSON parse first (proper -o json mode). When the JSON is
+    // well-formed, it is authoritative: a missing/empty `response` field
+    // means gemini emitted a diagnostic/error envelope, not an answer.
+    // Raw-text fallback applies only when the payload isn't valid JSON
+    // (e.g. gemini-cli printed prose directly, pre--o-json fallback path).
     try {
       const parsed = JSON.parse(cleaned);
-      const text = parsed.response || "";
+      const text = typeof parsed.response === "string" ? parsed.response.trim() : "";
       if (text) return makeResult("gemini", text, durationMs);
-      // Fall through if response field empty.
+      return makeError(
+        "gemini",
+        "JSON response missing or empty `response` field",
+        stderr || cleaned.slice(0, 500),
+        durationMs
+      );
     } catch {
-      // Fall through to raw-text path.
+      // Not JSON — fall through to raw-text path.
     }
     // Raw-text fallback: take cleaned stdout as the response.
     return makeResult("gemini", cleaned, durationMs);
