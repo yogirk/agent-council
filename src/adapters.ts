@@ -406,12 +406,17 @@ export const codexAdapter: AgentAdapter = {
 
       // Last-resort fallback: codex sometimes emits the agent reply as
       // plain text in stderr after the JSONL banner ("codex\n<reply>").
-      // Capture text after the literal "codex\n" marker if no JSONL
-      // item.completed was found.
+      // Capture text after the "codex\n" marker if no JSONL
+      // item.completed was found. PATCH 2026-05-21 (PR #10 codex review
+      // P2): match the marker at start-of-stream too, not just after a
+      // leading newline — when stderr begins directly with "codex\n..."
+      // the previous "\ncodex\n" search missed it.
       if (!responseText) {
-        const codexMarker = stderr.indexOf("\ncodex\n");
-        if (codexMarker !== -1) {
-          const tail = stderr.slice(codexMarker + 7).trim();
+        const codexMarkerRe = /(^|\n)codex\n/;
+        const match = codexMarkerRe.exec(stderr);
+        if (match) {
+          const markerEnd = match.index + match[0].length;
+          const tail = stderr.slice(markerEnd).trim();
           // Strip trailing "tokens used:" footer and the like
           const cut = tail.split(/\n(tokens used|ERROR codex_core)/)[0].trim();
           if (cut.length > 10) responseText = cut;
@@ -474,13 +479,23 @@ export const geminiAdapter: AgentAdapter = {
     if (exitCode !== 0) {
       return makeError("gemini", `Exit code ${exitCode}`, stderr, durationMs);
     }
-    // Strip gemini-cli warning lines from stdout that prepend the actual
-    // response on Windows ("Warning: True color...", "Ripgrep is not...").
-    const cleaned = stdout
-      .split("\n")
-      .filter((l) => !/^Warning:/i.test(l) && !/^Ripgrep is not available/i.test(l))
-      .join("\n")
-      .trim();
+    // Strip gemini-cli preamble lines from stdout that prepend the actual
+    // response on Windows ("Warning: True color (24-bit) support not detected.",
+    // "Ripgrep is not available. Falling back to GrepTool.").
+    // PATCH 2026-05-21 (PR #10 codex review P2): only strip CLI preamble
+    // BEFORE the first non-preamble line, so model output that legitimately
+    // begins with "Warning:" or "Ripgrep ..." inside the response body is
+    // not silently dropped.
+    const isPreamble = (l: string): boolean =>
+      /^Warning:\s+True color/i.test(l) ||
+      /^Ripgrep is not available\b/i.test(l) ||
+      l.trim() === "";
+    const lines = stdout.split("\n");
+    let preambleEnd = 0;
+    while (preambleEnd < lines.length && isPreamble(lines[preambleEnd])) {
+      preambleEnd++;
+    }
+    const cleaned = lines.slice(preambleEnd).join("\n").trim();
     if (!cleaned) {
       return makeError("gemini", "Empty stdout", stderr, durationMs);
     }
