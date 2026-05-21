@@ -95,11 +95,19 @@ async function dispatchAgent(
 ): Promise<AgentResult> {
   const startTime = Date.now();
   const cmd = adapter.command(prompt, repoRoot);
+  // PATCH 2026-05-21: pipe prompt over stdin when adapter requests it.
+  // See AgentAdapter.stdinPrompt for the codex/Windows rationale.
+  const useStdin = adapter.stdinPrompt === true;
   const proc = Bun.spawn(cmd, {
+    stdin: useStdin ? "pipe" : undefined,
     stdout: "pipe",
     stderr: "pipe",
     cwd: repoRoot,
   });
+  if (useStdin && proc.stdin) {
+    proc.stdin.write(prompt);
+    proc.stdin.end();
+  }
 
   let timedOut = false;
   let killTimer: ReturnType<typeof setTimeout> | null = null;
