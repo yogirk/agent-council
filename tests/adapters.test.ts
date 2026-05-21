@@ -88,9 +88,27 @@ describe("codexAdapter", () => {
     expect(result.status).toBe("error");
   });
 
-  test("command returns correct CLI args", () => {
+  test("command returns correct CLI args (prompt via stdin)", () => {
     const cmd = codexAdapter.command("test question", "/repo");
-    expect(cmd).toEqual(["codex", "exec", "test question", "-C", "/repo", "-s", "read-only", "--json"]);
+    // Prompt is piped via stdin (`-` placeholder) to avoid Bun.spawn
+    // argv-with-newlines corruption on Windows. superpowers plugin is
+    // disabled per-invocation to prevent skill-bootstrap loop.
+    expect(cmd).toEqual([
+      "codex",
+      "exec",
+      "-",
+      "-C",
+      "/repo",
+      "-s",
+      "read-only",
+      "--json",
+      "-c",
+      'plugins."superpowers@openai-curated".enabled=false',
+    ]);
+  });
+
+  test("stdinPrompt is true", () => {
+    expect(codexAdapter.stdinPrompt).toBe(true);
   });
 });
 
@@ -107,11 +125,24 @@ describe("geminiAdapter", () => {
     expect(result.duration_ms).toBe(3000);
   });
 
-  test("parseOutput: malformed JSON returns error envelope", () => {
+  test("parseOutput: malformed JSON falls back to raw-text", () => {
+    // gemini-cli sometimes prints prose instead of JSON (warning lines
+    // already stripped). Raw-text fallback preserves the prose so the
+    // council still has something to deliberate over.
     const result = geminiAdapter.parseOutput("not json", "", 0, 100);
 
+    expect(result.status).toBe("ok");
+    expect(result.response).toBe("not json");
+  });
+
+  test("parseOutput: valid JSON with empty response field returns error", () => {
+    // Codex review PR #10: a well-formed JSON envelope with no `response`
+    // is a diagnostic/error payload, NOT something to deliberate over.
+    // Must surface as adapter error so quorum logic doesn't count it ok.
+    const result = geminiAdapter.parseOutput('{"session_id":"x"}', "", 0, 100);
+
     expect(result.status).toBe("error");
-    expect(result.error).toContain("JSON parse failed");
+    expect(result.error).toContain("response");
   });
 
   test("parseOutput: empty stdout returns error", () => {
@@ -120,9 +151,16 @@ describe("geminiAdapter", () => {
     expect(result.status).toBe("error");
   });
 
-  test("command returns correct CLI args", () => {
+  test("command returns correct CLI args (prompt via stdin)", () => {
     const cmd = geminiAdapter.command("test question", "/repo");
-    expect(cmd).toEqual(["gemini", "-p", "test question", "-o", "json"]);
+    // Prompt is piped via stdin to avoid Bun.spawn argv-with-newlines
+    // corruption on Windows. gemini-cli `-p` is documented as appended
+    // to stdin, so omitting `-p` and writing prompt to stdin is enough.
+    expect(cmd).toEqual(["gemini", "-o", "json"]);
+  });
+
+  test("stdinPrompt is true", () => {
+    expect(geminiAdapter.stdinPrompt).toBe(true);
   });
 });
 
